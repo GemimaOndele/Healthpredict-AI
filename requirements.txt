@@ -34,8 +34,8 @@ huggingface_hub[cli] # For CLI support
 transformers==4.44.2
 sentencepiece>=0.1.99    # requis pour Marian
 # For tokenization and model handling
-torch==2.2.0             # PyTorch for model inference
 # For handling large models and datasets
 datasets>=2.14.0         # For loading datasets from Hugging Face   
 # For model evaluation and metrics
 evaluate>=0.4.0          # For model evaluation metrics 
+torch==2.8.0
