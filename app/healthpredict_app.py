@@ -12,8 +12,14 @@ from typing import Optional
 
 # ML / NLP
 import shap  # optionnel
-from transformers import CamembertTokenizer, CamembertModel, MarianMTModel, MarianTokenizer
-import torch
+
+from transformers import AutoTokenizer, AutoModel, AutoModelForSeq2SeqLM
+camembert_tok = AutoTokenizer.from_pretrained("camembert-base")
+camembert_model = AutoModel.from_pretrained("camembert-base")
+
+mt_name = "Helsinki-NLP/opus-mt-fr-en"
+mt_tok = AutoTokenizer.from_pretrained(mt_name)
+mt_model = AutoModelForSeq2SeqLM.from_pretrained(mt_name)
 
 # ----- Téléchargement des assets (optionnel) ----- Hook automatique dans Streamlit
 from dotenv import load_dotenv # type: ignore
