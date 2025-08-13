@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: healthpredict-ai
+    env: docker
+    region: frankfurt
+    plan: free
+    # Si tu veux des variables d'env (ex: HF token privé), ajoute-les ici.
+    envVars:
+      - key: PYTHONIOENCODING
+        value: utf-8

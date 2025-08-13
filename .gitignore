@@ -1,0 +1,10 @@
+
+assets/
+models/
+data/raw/
+data/processed/
+.henv/
+# .gitignore
+echo ".env" >> .gitignore
+git rm --cached .env
+git commit -m "chore: ignore .env from Git"

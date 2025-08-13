@@ -1,0 +1,24 @@
+#Ça double le plafond à 400 MB, mais le vrai fix c’est d’envoyer moins de données (ci‑dessous).
+
+# config.toml — Configuration Streamlit optimisée pour HealthPredict AI
+
+[server]
+# Augmente la taille maximale des messages envoyés au navigateur
+maxMessageSize = 400
+# Permet l’accès externe (utile si déploiement réseau)
+enableCORS = true
+enableXsrfProtection = true
+# Mode sans interface graphique (utile en déploiement serveur)
+headless = true
+
+[client]
+# Evite que le front-end plante sur des tables volumineuses
+toolbarMode = "minimal"
+
+[theme]
+# Personnalisation (optionnel)
+primaryColor = "#2C6E91"
+backgroundColor = "#F5F5F5"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#000000"
+font = "sans serif"

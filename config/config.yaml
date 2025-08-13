@@ -1,0 +1,48 @@
+# === HealthPredict AI - Configuration ===
+paths:
+  raw_csv: data/raw/raw_openfda_imaging_reports.csv
+  raw_jsonl: data/raw/raw_openfda_imaging_reports.jsonl
+  processed_csv: data/processed/medical_imaging_text_labeled.csv
+  models_dir: models
+  tfidf_model: models/healthpredict_model.joblib
+  camembert_model: models/healthpredict_camembert_model.joblib
+
+openfda:
+  # endpoint stable OpenFDA (devices > adverse events)
+  base_url: "https://api.fda.gov/device/event.json"
+  start_date: "2018-01-01"
+  end_date: "2025-12-31"
+  # Mots-clés pertinents pour IRM/Scanner/Radiographie (device + texte narratif)
+  keywords:
+    - "mri"
+    - "magnetic resonance"
+    - "ct"
+    - "computed tomography"
+    - "x-ray"
+    - "radiography"
+    - "fluoroscopy"
+    - "scanner"
+    - "irm"
+    - "tomodensitometry"
+  limit: 100        # max par page (OpenFDA max=100)
+  max_records: 5000 # stop-paginate quand atteint
+  sleep_sec: 0.25   # pour éviter 429
+
+training:
+  test_size: 0.2
+  random_state: 42
+  use_stratify_min_per_class: 2   # seuil minimal pour activer stratify
+  tfidf:
+    min_df: 2
+    ngram_range: [1, 2]
+    max_features: 20000
+  clf: "logreg"   # "logreg" ou "rf"
+  rf:
+    n_estimators: 300
+    max_depth: null
+  logreg:
+    max_iter: 2000
+    C: 1.0
+
+shap:
+  sample_background: 200

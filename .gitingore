@@ -1,0 +1,33 @@
+@"
+# Python / venv
+__pycache__/
+*.py[cod]
+*.egg-info/
+.henv/
+.venv/
+.env
+.streamlit/
+
+# OS/IDE
+.DS_Store
+.vscode/
+
+# Données locales (gros fichiers)
+data/raw/
+data/processed/
+
+# Modèles lourds
+models/
+*.joblib
+*.pt
+*.bin
+*.onnx
+
+# Build cache
+*.whl
+"@ | Set-Content -Encoding UTF8 .gitignore
+
+git add .gitignore
+git commit -m "chore: add .gitignore (exclude venv, data brutes, modèles)"
+git push origin main
+git push --set-upstream origin main
