@@ -22,3 +22,54 @@ sentencepiece>=0.2
 
 # HTTP
 requests>=2.31
+
+#.env
+python-dotenv>=1.0
+
+#hugging face
+# For downloading models and datasets from Hugging Face
+huggingface_hub>=0.20
+huggingface_hub[cli] # For CLI support
+hf_transfer>=0.20
+
+transformers==4.44.2
+sentencepiece>=0.1.99    # requis pour Marian
+# For tokenization and model handling
+torch==2.2.0             # PyTorch for model inference
+# For handling large models and datasets
+datasets>=2.14.0         # For loading datasets from Hugging Face   
+# For model evaluation and metrics
+evaluate>=0.4.0          # For model evaluation metrics 
+# For model optimization and quantization
+optimum>=1.12.0          # For model optimization
+# For model deployment and serving
+optimum-intel>=1.12.0    # For Intel optimizations
+# For model compression and pruning
+optimum-pruning>=1.12.0  # For model pruning
+# For model quantization
+optimum-quantization>=1.12.0  # For model quantization  
+# For model distillation
+optimum-distillation>=1.12.0  # For model distillation
+# For model conversion
+optimum-conversion>=1.12.0  # For model conversion
+# For model serving
+optimum-serving>=1.12.0  # For model serving
+# For model training and fine-tuning
+optimum-training>=1.12.0  # For model training and fine-tuning
+# For model inference
+optimum-inference>=1.12.0  # For model inference
+# For model visualization
+optimum-visualization>=1.12.0  # For model visualization
+auto-sklearn>=0.14.7  # For automated machine learning tasks
+# For model explainability and interpretability
+lime>=0.2.0  # For model explainability
+# For model debugging and profiling         
+debugpy>=1.6.0  # For debugging Python code
+# For model serving and deployment
+uvicorn>=0.22.0  # For serving FastAPI applications 
+# For model serving and deployment
+fastapi>=0.95.2  # For building APIs with FastAPI
+# For model serving and deployment
+starlette>=0.27.0  # For building web applications with Starlette
+# For model serving and deployment  
+gunicorn>=20.1.0  # For serving Python applications with Gunicorn
