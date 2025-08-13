@@ -7,4 +7,4 @@ data/processed/
 # .gitignore
 echo ".env" >> .gitignore
 git rm --cached .env
-git commit -m "chore: ignore .env from Git"
+git commit -m "chore: ignore .env from Git".env
