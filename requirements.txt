@@ -30,7 +30,6 @@ python-dotenv>=1.0
 # For downloading models and datasets from Hugging Face
 huggingface_hub>=0.20
 huggingface_hub[cli] # For CLI support
-hf_transfer>=0.20
 
 transformers==4.44.2
 sentencepiece>=0.1.99    # requis pour Marian

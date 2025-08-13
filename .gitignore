@@ -8,3 +8,5 @@ data/processed/
 echo ".env" >> .gitignore
 git rm --cached .env
 git commit -m "chore: ignore .env from Git".env
+
+.venv/
