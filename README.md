@@ -22,5 +22,11 @@ pip install -r requirements.txt
 # Variables (optionnel)
 cp .env.example .env
 
+#lancer le téléchargement des modèles IA entrainées publié sur hugging face  
+python scripts/download_assets.py
+
+#lancer l'évaluation des prédictions 
+python notebooks/eval_healthpredict.py
+
 # Lancer l'app
 streamlit run app/healthpredict_app.py
