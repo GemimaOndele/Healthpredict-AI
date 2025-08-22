@@ -25,6 +25,9 @@ cp .env.example .env
 #lancer le téléchargement des modèles IA entrainées publié sur hugging face  
 python scripts/download_assets.py
 
+# (option) activer CamemBERT pour l'éval
+$env:HP_USE_CAMEMBERT="1"
+
 #lancer l'évaluation des prédictions 
 python notebooks/eval_healthpredict.py
 
