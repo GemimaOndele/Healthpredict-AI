@@ -1,11 +1,12 @@
 # === HealthPredict AI - Configuration ===
 paths:
-  raw_csv: data/raw/raw_openfda_imaging_reports.csv
-  raw_jsonl: data/raw/raw_openfda_imaging_reports.jsonl
-  processed_csv: data/processed/medical_imaging_text_labeled.csv
-  models_dir: models
-  tfidf_model: models/healthpredict_model.joblib
-  camembert_model: models/healthpredict_camembert_model.joblib
+  raw_csv: assets/data/raw/raw_openfda_imaging_reports.csv
+  raw_jsonl: assets/data/raw/raw_openfda_imaging_reports.jsonl   # ok même si absent
+  processed_csv: assets/data/processed/medical_imaging_text_labeled.csv
+  models_dir: assets/models
+  tfidf_model: assets/models/healthpredict_model.joblib
+  camembert_model: assets/models/healthpredict_camembert_model.joblib
+
 
 openfda:
   # endpoint stable OpenFDA (devices > adverse events)

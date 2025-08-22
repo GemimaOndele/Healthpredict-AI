@@ -1,33 +1,35 @@
-# === Build image ===
 FROM python:3.11-slim
 
-# Pré-requis système (build wheels usuels)
+ENV PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# OS deps (OCR + PDF + build)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ git curl && \
+    tesseract-ocr tesseract-ocr-fra poppler-utils libgl1 libglib2.0-0 \
+    build-essential curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 
-# Copie requirements en premier (cache Docker)
-COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Torch CPU (optionnel mais recommandé si CamemBERT)
+# RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
-# Copie du code
+# spaCy modèles optionnels (si tu utilises spaCy)
+# RUN python -m spacy download fr_core_news_sm && python -m spacy download en_core_web_sm
+
 COPY . .
 
-# Assure que start.sh est exécutable (si tu es sur Windows, CRLF -> LF recommandé)
-RUN chmod +x ./start.sh
+# Activer CamemBERT/Traduction/auto-download assets au runtime si tu veux
+ENV HP_USE_CAMEMBERT=1 \
+    HP_USE_SPACY=1 \
+    HP_AUTO_DOWNLOAD=1 \
+    HP_MAX_ROWS_UI=150000
 
-# Variables par défaut (tu peux les surcharger sur Render)
-ENV HP_ASSETS_DIR=assets
-# HP_ASSETS_SPECS et HF_TOKEN seront injectés via l’UI Render/env group
-
-# Streamlit (sans prompts d’update)
-ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
-
-# Port Render
-EXPOSE 10000
-
-# CMD: télécharge puis lance l’app
-CMD ["./start.sh"]
+# Streamlit config
+ENV PORT=8501
+EXPOSE 8501
+CMD ["streamlit", "run", "app/healthpredict_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
 # === End of Dockerfile ===

@@ -1,43 +1,42 @@
-# scripts/download_assets.py
 import os
 from pathlib import Path
 from huggingface_hub import hf_hub_download
 
-REPO_ID = "Gkop/healthpredict-assets"
-REPO_TYPE = "dataset"  # IMPORTANT
-TOKEN = os.environ.get("HF_TOKEN")
+REPO_ID   = "Gkop/healthpredict-assets"
+REPO_TYPE = "dataset"
+TOKEN     = os.environ.get("HF_TOKEN")
 
-# 1ère valeur = chemin du fichier DANS le repo HF (relative path)
-# 2ème valeur = chemin local où tu veux l'écrire dans ton projet
+ASSETS_DIR = Path("assets")
+(ASSETS_DIR / "models").mkdir(parents=True, exist_ok=True)
+(ASSETS_DIR / "data" / "raw").mkdir(parents=True, exist_ok=True)
+
+DOWNLOAD_CAMEMBERT = os.getenv("HP_DOWNLOAD_CAMEMBERT", "0") == "1"
+
 FILES = [
-    ("healthpredict_model.joblib",            "assets/models/healthpredict_model.joblib"),
-    ("healthpredict_camembert_model.joblib",  "assets/models/healthpredict_camembert_model.joblib"),
-    ("raw_openfda_imaging_reports.csv",      "assets/data/raw/raw_openfda_imaging_reports.csv"),
+    ("healthpredict_model.joblib",      ASSETS_DIR / "models" / "healthpredict_model.joblib"),
+    ("raw_openfda_imaging_reports.csv", ASSETS_DIR / "data" / "raw" / "raw_openfda_imaging_reports.csv"),
 ]
+if DOWNLOAD_CAMEMBERT:
+    FILES.append(("healthpredict_camembert_model.joblib", ASSETS_DIR / "models" / "healthpredict_camembert_model.joblib"))
 
-def main():
-    for filename_in_repo, dest_path in FILES:
-        # Sécurité: empêcher une URL par erreur en destination
-        if "://" in dest_path:
-            raise ValueError(f"dest_path must be a local path, not a URL: {dest_path}")
+def _download(remote_name: str, dst: Path):
+    print(f"[hf] {REPO_ID} [{REPO_TYPE}] : {remote_name} -> {dst}")
+    fp = hf_hub_download(
+        repo_id=REPO_ID,
+        repo_type=REPO_TYPE,
+        filename=remote_name,
+        revision="main",
+        token=TOKEN,
+    )
+    Path(fp).replace(dst)
+    print("[ok]", dst, "téléchargé depuis Hugging Face.")
 
-        dst = Path(dest_path)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        print(f"[hf] {REPO_ID} [{REPO_TYPE}] : {filename_in_repo} -> {dst}")
-
-        try:
-            fp = hf_hub_download(
-                repo_id=REPO_ID,
-                filename=filename_in_repo,   # nom/chemin RELATIF dans le repo HF
-                repo_type=REPO_TYPE,
-                revision="main",
-                token=TOKEN,                 # requis si le repo est privé
-            )
-            Path(fp).replace(dst)
-            print(f"[ok] {dst} téléchargé depuis Hugging Face.")
-        except Exception as e:
-            print("[ERROR] download_assets:", e)
-            raise
+def ensure_assets():
+    for remote_name, dst in FILES:
+        if dst.exists():
+            print("[skip] déjà présent:", dst)
+            continue
+        _download(remote_name, dst)
 
 if __name__ == "__main__":
-    main()
+    ensure_assets()

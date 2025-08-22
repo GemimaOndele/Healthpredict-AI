@@ -1,105 +1,26 @@
+# HealthPredict AI — Maintenance prédictive des équipements médicaux
 
-# Healthpredict-AI
-Maintenance prédictive des équipements médicaux (NLP + IA) — analyse de rapports, détection de mots-clés, similarité historique, OCR, traduction, et estimation du prochain incident.
-# HealthPredict AI Dashboard
+Application Streamlit pour analyser des rapports d’incidents (OpenFDA & documents) et prédire la criticité via IA (TF-IDF/LogReg ou CamemBERT + classif). OCR, traduction EN→FR optionnelle, similarité historique, export CSV/XLSX, historique SQLite.
 
-Projet de maintenance prédictive des équipements médicaux.
-## Créer une environnement virtuel pour enregistrer les librairies à installer dedans au lieu l'espace de l'ordinateur
+## ✨ Fonctionnalités
+- Chargement dataset (processed/raw), fallback auto.
+- Prédiction texte libre & documents (PDF, DOCX, images → OCR).
+- Mots-clés TF-IDF, cas similaires (cosinus).
+- Traduction EN→FR (Transformers, optionnel).
+- Historique des prédictions (SQLite).
+- Graphiques de tendance (Altair).
 
-**entrer dans le dossier cd HealthPredict_ai_dashboard
-
-**puis créer l'environnement
-python -m venv .henv
-
-## Activer l'environnement vrituel 
-
-.henv\Scripts\activate  ##Sur Windows
-
-source .henv/bin/activate  ##Sur MACOSX
-
-## Optionnel  pour le désactiver : deactivate 
-
-## Lancer l'application
-
+## 🚀 Démarrage rapide (local)
 ```bash
-streamlit run healthpredict_app.py
-
-Dépendances :
-
--Streamlit
--Pandas
--Numpy
--Matplotlib
-
----
-
-## 🖥️ Lancer le projet
-
-Dans ton terminal :
-```bash
-streamlit run app.py
-
-
-
-
-
-
-# HealthPredict AI (texte → maintenance prédictive)
-
-## Setup
-```bash
-python -m venv .henv
-.henv/Scripts/activate            # Windows
+python -m venv .venv && source .venv/bin/activate    # (Windows: .venv\Scripts\activate)
 pip install -r requirements.txt
+# (optionnel) torch CPU:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# (optionnel) spaCy modèles:
+# python -m spacy download fr_core_news_sm && python -m spacy download en_core_web_sm
 
+# Variables (optionnel)
+cp .env.example .env
 
-
-
-Pipeline données → modèles
-Collecte OpenFDA
-
-bash
-Copier
-Modifier
-python scripts/01_download_openfda.py
-→ data/raw/raw_openfda_imaging_reports.csv
-
-Préparation + labellisation heuristique
-
-bash
-Copier
-Modifier
-python scripts/02_prepare_and_label.py
-→ data/processed/medical_imaging_text_labeled.csv
-
-Entraînement modèles texte
-
-bash
-Copier
-Modifier
-python scripts/03_train_text_models.py     # TF-IDF + (LogReg ou RF)
-python scripts/train_camembert.py          # CamemBERT + LogReg
-→ models/healthpredict_model.joblib + models/healthpredict_camembert_model.joblib
-
-Lancer l’app
-bash
-Copier
-Modifier
+# Lancer l'app
 streamlit run app/healthpredict_app.py
-Notes
-Les labels initiaux sont heuristiques (mots-clés). Pour un usage réel, prévoir une annotation humaine.
-
-Respecter RGPD / HIPAA / anonymisation.
-
-markdown
-Copier
-Modifier
-
----
-
-## Ce que ça corrige par rapport à mes erreurs
-- **OpenFDA 404**: on utilise `date_received` (pas `receivedate`) et `mdr_text.text`; pagination gérée, 404 traité proprement.
-- **Fichiers manquants**: les scripts écrivent exactement **aux chemins** lus par les étapes suivantes et par l’app (via `config.yaml`).
-- **Stratify**: activé seulement si chaque classe a assez d’échantillons → fini l’erreur “test_size = 1 …”.
-- **SHAP**: on passe par **`maskers.Text()`** + une fonction proba qui **nettoie** les textes avant de les donner au modèle (évite les `zero-size array`), et on encadre d’un `try/except` propre.
-- **CamemBERT**: sauvegarde `(tokenizer, camembert, clf)` et fonction d’inférence dédi

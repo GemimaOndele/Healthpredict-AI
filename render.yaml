@@ -4,7 +4,7 @@ services:
     env: docker
     region: frankfurt
     plan: free
-    # Si tu veux des variables d'env (ex: HF token privé), ajoute-les ici.
+    # Ssi je veux des variables d'env (ex: HF token privé), ajouter ici.
     envVars:
       - key: PYTHONIOENCODING
         value: utf-8
