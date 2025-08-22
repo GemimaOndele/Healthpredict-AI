@@ -1,30 +1,34 @@
-#Ça double le plafond à 400 MB, mais le vrai fix c’est d’envoyer moins de données (ci‑dessous).
+# config.toml — Configuration Streamlit pour HealthPredict AI
 
-# config.toml — Configuration Streamlit optimisée pour HealthPredict AI
+# 1) Dossier projet
+$proj = "C:\Healthpredict-AI-clean"
 
+# 2) Corriger le dossier .streamlit au bon endroit (dans ton HOME)
+$homeCfgDir = Join-Path $HOME ".streamlit"
+New-Item -ItemType Directory -Force -Path $homeCfgDir | Out-Null
+
+# 3) Ecrire un config.toml propre
+@'
 [server]
-# Augmente la taille maximale des messages envoyés au navigateur
-maxMessageSize = 400
-# Permet l’accès externe (utile si déploiement réseau)
+address = "localhost"
+port = 8501
+headless = true
 enableCORS = true
 enableXsrfProtection = true
-# Mode sans interface graphique (utile en déploiement serveur)
-headless = true
+maxMessageSize = 400
 
 [client]
-# Evite que le front-end plante sur des tables volumineuses
 toolbarMode = "minimal"
 
 [theme]
-# Personnalisation (optionnel)
 primaryColor = "#2C6E91"
 backgroundColor = "#F5F5F5"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#000000"
 font = "sans serif"
+'@ | Set-Content -Encoding utf8 (Join-Path $homeCfgDir "config.toml")
 
-[server]
-headless = true
-enableCORS = false
-enableXsrfProtection = true
-port = 8501
+# (facultatif) si j'avais un .streamli dans le projet, on le renomme/retire
+if (Test-Path (Join-Path $proj ".streamli")) {
+  Rename-Item -Force (Join-Path $proj ".streamli") (Join-Path $proj ".streamli.bak")
+}

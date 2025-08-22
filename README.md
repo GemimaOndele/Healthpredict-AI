@@ -15,15 +15,20 @@ Application Streamlit pour analyser des rapports d’incidents (OpenFDA & docume
 python -m venv .venv && source .venv/bin/activate    # (Windows: .venv\Scripts\activate)
 pip install -r requirements.txt
 # (optionnel) torch CPU:
-# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 # (optionnel) spaCy modèles:
-# python -m spacy download fr_core_news_sm && python -m spacy download en_core_web_sm
+python -m spacy download fr_core_news_sm && python -m spacy download en_core_web_sm
 
 # Variables (optionnel)
 cp .env.example .env
 
 #lancer le téléchargement des modèles IA entrainées publié sur hugging face  
 python scripts/download_assets.py
+
+#lancer l'entrainement du modèle joblib
+python scripts/train_minimal_tfidf.py 
+
+python scripts/train_camembert_baseline.py
 
 # (option) activer CamemBERT pour l'éval
 $env:HP_USE_CAMEMBERT="1"
@@ -32,4 +37,10 @@ $env:HP_USE_CAMEMBERT="1"
 python notebooks/eval_healthpredict.py
 
 # Lancer l'app
-streamlit run app/healthpredict_app.py
+
+streamlit run app/healthpredict_app.py  #ou 
+
+.\start.ps1
+
+## Ouvre le lien pour voir l'application IA
+http://localhost:8501

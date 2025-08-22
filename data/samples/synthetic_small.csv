@@ -1,0 +1,6 @@
+text,label_critique,text_clean
+"Critique - IRM arrêtée, surchauffe détectée, fumée au niveau de l'alimentation",1,"critique - irm arrêtée, surchauffe détectée, fumée au niveau de l'alimentation"
+"Modérée - Scanner CT produit un bruit anormal, redémarrage requis",0,"modérée - scanner ct produit un bruit anormal, redémarrage requis"
+"Faible - Message d'alarme intermittent, aucun incident patient",0,"faible - message d'alarme intermittent, aucun incident patient"
+Critique - X-ray panel short circuit causing shutdown,1,critique - x-ray panel short circuit causing shutdown
+"Modérée - Fluoroscopy latency observed, device rebooted",0,"modérée - fluoroscopy latency observed, device rebooted"

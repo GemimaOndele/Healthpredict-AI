@@ -28,3 +28,4 @@ sentencepiece>=0.2,<0.3
 shap>=0.45,<0.50
 spacy>=3.7,<4
 
+seaborn

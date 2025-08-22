@@ -1,43 +1,31 @@
 # === HealthPredict AI - Configuration ===
+# config/config.yaml
 paths:
   raw_csv: assets/data/raw/raw_openfda_imaging_reports.csv
-  raw_jsonl: assets/data/raw/raw_openfda_imaging_reports.jsonl   # ok même si absent
+  raw_jsonl: assets/data/raw/raw_openfda_imaging_reports.jsonl
   processed_csv: assets/data/processed/medical_imaging_text_labeled.csv
   models_dir: assets/models
   tfidf_model: assets/models/healthpredict_model.joblib
   camembert_model: assets/models/healthpredict_camembert_model.joblib
 
-
 openfda:
-  # endpoint stable OpenFDA (devices > adverse events)
   base_url: "https://api.fda.gov/device/event.json"
   start_date: "2018-01-01"
   end_date: "2025-12-31"
-  # Mots-clés pertinents pour IRM/Scanner/Radiographie (device + texte narratif)
-  keywords:
-    - "mri"
-    - "magnetic resonance"
-    - "ct"
-    - "computed tomography"
-    - "x-ray"
-    - "radiography"
-    - "fluoroscopy"
-    - "scanner"
-    - "irm"
-    - "tomodensitometry"
-  limit: 100        # max par page (OpenFDA max=100)
-  max_records: 5000 # stop-paginate quand atteint
-  sleep_sec: 0.25   # pour éviter 429
+  keywords: ["mri","magnetic resonance","ct","computed tomography","x-ray","radiography","fluoroscopy","scanner","irm","tomodensitometry"]
+  limit: 100
+  max_records: 5000
+  sleep_sec: 0.25
 
 training:
   test_size: 0.2
   random_state: 42
-  use_stratify_min_per_class: 2   # seuil minimal pour activer stratify
+  use_stratify_min_per_class: 2
   tfidf:
     min_df: 2
     ngram_range: [1, 2]
     max_features: 20000
-  clf: "logreg"   # "logreg" ou "rf"
+  clf: "logreg"
   rf:
     n_estimators: 300
     max_depth: null

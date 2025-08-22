@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-# HealthPredict AI — Dashboard + Prédiction + 📎 Documents + 📚 Historique & Prévisions
-# OCR images & PDF (Tesseract + Poppler), Similarité historique, Traduction FR, Exports CSV/Excel, Historique SQLite
+# HealthPredict AI — Dashboard + Prédiction + 📎 Documents + 📚 Historique & Prévisions + 📑 Évaluation
+# OCR images & PDF (Tesseract + Poppler, optionnel), Similarité historique, Traduction FR (optionnel),
+# Exports CSV/Excel, Historique SQLite (optionnel)
 
 # app/healthpredict_app.py
 import os, io, sys, json, joblib, yaml, warnings, unicodedata, re
@@ -8,15 +9,17 @@ from pathlib import Path
 import streamlit as st
 import pandas as pd
 import altair as alt
-import matplotlib.pyplot as plt  # noqa: F401 (parfois utile)
+import matplotlib.pyplot as plt  # noqa: F401 (utile parfois dans expander)
 import numpy as np
 import datetime as dt  # noqa: F401
 from math import sqrt
-from typing import Optional
+from typing import Optional, Tuple, List
+from sklearn.exceptions import NotFittedError
+import hpdb as db.
 
 # ========= Fix chemins: ajouter la racine du projet au PYTHONPATH =========
-APP_DIR = Path(__file__).resolve().parent           # .../app
-ROOT_DIR = APP_DIR.parent                           # projet/
+APP_DIR = Path(__file__).resolve().parent            # .../app
+ROOT_DIR = APP_DIR.parent                            # projet/
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -24,9 +27,10 @@ if str(ROOT_DIR) not in sys.path:
 st.set_page_config(page_title="HealthPredict AI", layout="wide")
 
 # =========================
-# Options lourdes (désactivables)
+# Options lourdes (désactivables via env)
 # =========================
 USE_CAMEMBERT = os.getenv("HP_USE_CAMEMBERT", "0") == "1"  # active aussi Transformers/torch si 1
+USE_SPACY     = os.getenv("HP_USE_SPACY", "0") == "1"      # extras UI
 
 # ==== ML / NLP (imports légers, chargements lourds en lazy) ====
 try:
@@ -45,15 +49,18 @@ if USE_CAMEMBERT:
         st.warning(f"CamemBERT/Transformers indisponible ({e}). Utilisation du modèle TF-IDF uniquement.")
 
 # ----- Téléchargement des assets (optionnel) -----
-from dotenv import load_dotenv  # type: ignore
-load_dotenv()
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except Exception:
+    pass
 
 def _safe_ensure_assets():
     """Appelle scripts/download_assets.ensure_assets() si dispo."""
     try:
         from scripts.download_assets import ensure_assets  # nécessite ROOT_DIR dans sys.path
     except Exception as e:
-        st.warning(f"Téléchargement des assets ignoré: {e}")
+        st.caption(f"ℹ️ Téléchargement des assets ignoré: {e}")
         return
     try:
         if os.environ.get("HP_AUTO_DOWNLOAD", "1") == "1":
@@ -63,15 +70,15 @@ def _safe_ensure_assets():
 
 _safe_ensure_assets()
 
-# ----- Base SQLite -----
+# ----- Base SQLite (optionnel) -----
 DB_ENABLED = True
 try:
-    import db  # fichier db.py à la racine
+    import hpdb as db  # <- utilise notre module local, pas le package 'db' de site-packages
     DB_PATH = os.environ.get("HP_DB", str(ROOT_DIR / "data" / "app.db"))
     db.init_db(DB_PATH)
 except Exception as e:
     DB_ENABLED = False
-    st.warning(f"Historique SQLite désactivé ({e}).")
+    st.caption(f"Historique SQLite désactivé (DB non initialisée) — {e}")
 
 # ----- parsers optionnels -----
 try:
@@ -104,7 +111,6 @@ except Exception:
 warnings.filterwarnings("ignore")
 
 # --- spaCy optionnel (pour extras UI, pas dans le pipeline TF-IDF) ---
-USE_SPACY = os.getenv("HP_USE_SPACY", "0") == "1"
 SPACY_READY = False
 if USE_SPACY:
     try:
@@ -305,6 +311,13 @@ def load_tfidf_model(path):
 def load_camembert(path):
     return joblib.load(path)  # (tokenizer, camembert_model, clf)
 
+def _vectorizer_is_fitted(vec) -> bool:
+    try:
+        # TfidfVectorizer fitted → vocabulary_ existe ET _tfidf.idf_ existe
+        return hasattr(vec, "vocabulary_") and hasattr(vec, "_tfidf") and hasattr(vec._tfidf, "idf_")
+    except Exception:
+        return False
+
 def camembert_proba_fn(texts, tokenizer, camembert, clf):
     if torch is None:
         raise RuntimeError("Torch indisponible — CamemBERT désactivé.")
@@ -323,15 +336,19 @@ def camembert_proba_fn(texts, tokenizer, camembert, clf):
 def get_vectorizer_from_pipeline(pipe):
     if hasattr(pipe, "named_steps"):
         for _, step in pipe.named_steps.items():
+            # TfidfVectorizer a get_feature_names_out
             if hasattr(step, "get_feature_names_out"):
                 return step
     return None
 
 def top_keywords_tfidf_from_pipe(pipe, cleaned_text: str, topk: int = 15):
     vec = get_vectorizer_from_pipeline(pipe)
-    if vec is None:
+    if vec is None or not _vectorizer_is_fitted(vec):
         return []
-    X = vec.transform([cleaned_text])
+    try:
+        X = vec.transform([cleaned_text])
+    except NotFittedError:
+        return []
     feats = vec.get_feature_names_out()
     idx = X.nonzero()[1]
     scores = X.data
@@ -342,7 +359,7 @@ def top_keywords_tfidf_from_pipe(pipe, cleaned_text: str, topk: int = 15):
     s = sum(p for _, p in pairs) or 1.0
     return [(w, round(100.0 * p / s, 1)) for w, p in pairs]
 
-# ======================= OCR helpers =======================
+# ======================= OCR helpers (optionnels) =======================
 def ocr_is_ready():
     if pytesseract is None or Image is None:
         return False, "Modules non importés (pytesseract/Pillow)."
@@ -473,7 +490,7 @@ def extract_text_from_any(uploaded_file) -> str:
     if name.endswith(".json"):
         return extract_text_from_json(bio)
     if name.endswith((".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")):
-        return ""  # OCR coté UI
+        return ""  # OCR côté UI
 
     bio.seek(0)
     try:
@@ -527,7 +544,6 @@ def add_detected_type(df: pd.DataFrame) -> pd.DataFrame:
     df2 = df.copy()
     tcol = pick_text_column(df2)
 
-    # construire des Series vides si la colonne n'existe pas
     s_generic = df2["generic_name"].astype(str) if "generic_name" in df2.columns else pd.Series("", index=df2.index)
     s_brand   = df2["brand_name"].astype(str)   if "brand_name"   in df2.columns else pd.Series("", index=df2.index)
     s_text    = df2[tcol].astype(str)
@@ -567,10 +583,14 @@ def add_parsed_date(df: pd.DataFrame) -> pd.DataFrame:
 def build_hist_matrix(df_hist: pd.DataFrame, pipe_tfidf_path: str, text_col: str):
     pipe = load_tfidf_model(pipe_tfidf_path)
     vec = get_vectorizer_from_pipeline(pipe)
-    if vec is None:
+    if vec is None or not _vectorizer_is_fitted(vec):
         return None, None, None
     corpus = df_hist[text_col].fillna("").astype(str).tolist()
-    X = vec.transform([clean_text(x) for x in corpus])
+    cleaned_corpus = [clean_text(x) for x in corpus]
+    try:
+        X = vec.transform(cleaned_corpus)
+    except NotFittedError:
+        return None, None, None
     try:
         row_norms = np.sqrt(X.power(2).sum(axis=1)).A1
     except Exception:
@@ -582,15 +602,18 @@ def top_similar(text_query: str, pipe, X_hist, row_norms, df_hist: pd.DataFrame,
     if pipe is None or X_hist is None:
         return []
     vec = get_vectorizer_from_pipeline(pipe)
-    vq = vec.transform([clean_text(text_query)])
-    # norme requête robuste
+    if vec is None or not _vectorizer_is_fitted(vec):
+        return []
+    try:
+        vq = vec.transform([clean_text(text_query)])
+    except NotFittedError:
+        return []
     try:
         qn = float(np.sqrt(vq.multiply(vq).sum()))
     except Exception:
         qn = float(np.linalg.norm(vq.toarray()))
     if qn == 0.0:
         return []
-    # produit puis division protégée
     sims = (X_hist @ vq.T).toarray().ravel()
     denom = (row_norms * qn)
     denom[denom == 0] = 1.0
@@ -599,6 +622,23 @@ def top_similar(text_query: str, pipe, X_hist, row_norms, df_hist: pd.DataFrame,
         return []
     top_idx = np.argsort(-sims)[:k]
     return [(float(sims[i]), df_hist.iloc[int(i)]) for i in top_idx]
+
+# ======================= UI helpers =======================
+def confidence_bar(proba: float):
+    pct = float(round(100*proba, 1))
+    dfp = pd.DataFrame({"label": ["Confiance"], "value": [pct]})
+    bg  = pd.DataFrame({"label": ["Confiance"], "value": [100]})
+    bar_bg = alt.Chart(bg).mark_bar(color="#eeeeee").encode(
+        x=alt.X("value:Q", scale=alt.Scale(domain=[0,100])), y=alt.Y("label:N")
+    )
+    bar_fg = alt.Chart(dfp).mark_bar().encode(
+        x="value:Q", y="label:N",
+        tooltip=[alt.Tooltip("value:Q", title="Confiance (%)", format=".1f")]
+    )
+    text = alt.Chart(dfp).mark_text(dx=6, color="black").encode(
+        x="value:Q", y="label:N", text=alt.Text("value:Q", format=".1f")
+    )
+    return (bar_bg + bar_fg + text).properties(height=48)
 
 # ======================= Chargement & UI =======================
 st.title("🔧 HealthPredict AI - Maintenance Prédictive des Équipements Médicaux")
@@ -624,8 +664,9 @@ if "Recommandation" not in df_main.columns and "Alerte" in df_main.columns:
 df_main = add_detected_type(df_main)
 df_main = add_parsed_date(df_main)
 
-tab_dash, tab_pred, tab_docs, tab_hist = st.tabs(
-    ["📊 Tableau de bord", "🤖 Prédiction", "📎 Documents", "📚 Historique & Prévisions"]
+# ---- Onglets ----
+tab_dash, tab_pred, tab_docs, tab_hist, tab_eval = st.tabs(
+    ["📊 Tableau de bord", "🤖 Prédiction", "📎 Documents", "📚 Historique & Prévisions", "📑 Évaluation"]
 )
 
 # ---- TAB Dashboard ----
@@ -670,6 +711,30 @@ with tab_dash:
     else:
         st.caption("Pas de dates exploitables pour la tendance.")
 
+    # Répartition par type d'événement
+    st.subheader("📊 Répartition par type d'événement")
+    if "event_type" in df_view.columns and df_view["event_type"].notna().any():
+        cnt = df_view["event_type"].astype(str).value_counts().reset_index()
+        cnt.columns = ["event_type","n"]
+        bar = alt.Chart(cnt.head(12)).mark_bar().encode(
+            x="n:Q", y=alt.Y("event_type:N", sort="-x"), tooltip=["event_type","n"]
+        ).properties(height=280)
+        st.altair_chart(bar, use_container_width=True)
+    else:
+        st.caption("Pas de colonne event_type.")
+
+    # Répartition par type détecté (camembert)
+    st.subheader("🧩 Répartition par type détecté")
+    if "TypeDetecte" in df_view.columns and df_view["TypeDetecte"].notna().any():
+        cnt2 = df_view["TypeDetecte"].astype(str).value_counts().reset_index()
+        cnt2.columns = ["Type","n"]
+        pie = alt.Chart(cnt2).mark_arc(innerRadius=50).encode(
+            theta="n:Q", color="Type:N", tooltip=["Type","n"]
+        ).properties(height=300)
+        st.altair_chart(pie, use_container_width=True)
+    else:
+        st.caption("Pas de colonne TypeDetecte.")
+
 # ---- TAB Prédiction (texte saisi) ----
 @st.cache_resource
 def _pipe_tfidf(path):
@@ -681,7 +746,8 @@ def _pipe_tfidf(path):
             p = fb
     if not os.path.exists(p):
         st.error("Modèle TF-IDF introuvable. Activez HP_AUTO_DOWNLOAD=1 (scripts/download_assets.py) "
-                 "ou placez assets/models/healthpredict_model.joblib.")
+                 "ou placez assets/models/healthpredict_model.joblib. "
+                 "Sinon, exécutez une fois: python scripts/train_minimal_tfidf.py")
         raise FileNotFoundError("healthpredict_model.joblib not found")
     return load_tfidf_model(p)
 
@@ -697,7 +763,7 @@ def _camembert(path):
                  "ou placez assets/models/healthpredict_camembert_model.joblib.")
     return load_camembert(p)
 
-def _predict_text(txt_for_model, which):
+def _predict_text(txt_for_model, which: str) -> Tuple[str, float, List[Tuple[str, float]]]:
     cleaned = clean_text(txt_for_model)
     if which == "CamemBERT + IA":
         if not USE_CAMEMBERT:
@@ -710,8 +776,14 @@ def _predict_text(txt_for_model, which):
                 return label, proba, None
             except Exception as e:
                 st.info(f"CamemBERT indisponible ({e}). Bascule TF-IDF.")
+    # TF-IDF
     pipe = _pipe_tfidf(cfg["paths"]["tfidf_model"])
-    proba = float(pipe.predict_proba([cleaned])[0][1])
+    try:
+        proba = float(pipe.predict_proba([cleaned])[0][1])
+    except NotFittedError:
+        st.error("Le modèle TF-IDF chargé n'est pas ajusté (NotFittedError). "
+                 "Exécutez: python scripts/train_minimal_tfidf.py")
+        raise
     label = "Critique" if proba >= 0.5 else "Pas critique"
     keywords = top_keywords_tfidf_from_pipe(pipe, cleaned, topk=15)
     return label, proba, keywords
@@ -731,8 +803,13 @@ with tab_pred:
             with st.expander("Voir le texte traduit"):
                 st.write(txt_for_model)
 
-        label, proba, kw = _predict_text(txt_for_model, model_type)
+        try:
+            label, proba, kw = _predict_text(txt_for_model, model_type)
+        except NotFittedError:
+            st.stop()
+
         st.markdown("🔴 **ALERTE CRITIQUE** (p=%.2f)" % proba if label == "Critique" else "🟢 **Pas critique** (p=%.2f)" % proba)
+        st.altair_chart(confidence_bar(proba), use_container_width=True)
 
         # 💾 Enregistrer dans SQLite (si activée)
         if DB_ENABLED:
@@ -773,7 +850,7 @@ with tab_pred:
             st.subheader("🔎 Cas historiques similaires (TF-IDF cosinus)")
             pipe_hist, X_hist, norms_hist = build_hist_matrix(df_main, cfg["paths"]["tfidf_model"], text_col_main)
             if pipe_hist is None:
-                st.info("Vectorizer indisponible (modèle TF-IDF).")
+                st.info("Vectorizer indisponible ou non ajusté (modèle TF-IDF). Exécutez d'abord le training minimal.")
             else:
                 sims = top_similar(txt_for_model, pipe_hist, X_hist, norms_hist, df_main, text_col_main, k=10)
                 if sims:
@@ -802,9 +879,9 @@ with tab_docs:
     model_docs = st.selectbox("Modèle pour documents :", ["Random Forest / Logistic Regression", "CamemBERT + IA"], key="sel_model_docs")
     max_chars = st.slider("Taille max analysée par document (caractères)", 2000, 40000, 12000, 1000, key="slider_max_chars_docs")
 
-    st.markdown("**Paramètres OCR**")
-    use_ocr = st.toggle("Activer l’OCR pour images", value=True, key="toggle_use_ocr")
-    use_pdf_ocr = st.toggle("Activer l’OCR pour PDF scannés", value=True, key="toggle_use_pdf_ocr")
+    st.markdown("**Paramètres OCR (optionnels)**")
+    use_ocr = st.toggle("Activer l’OCR pour images", value=False, key="toggle_use_ocr")
+    use_pdf_ocr = st.toggle("Activer l’OCR pour PDF scannés", value=False, key="toggle_use_pdf_ocr")
     tesseract_path = st.text_input("Chemin Tesseract (Windows)", value=r"C:\Program Files\Tesseract-OCR\tesseract.exe", key="inp_tess_path")
     poppler_path = st.text_input("Chemin Poppler (bin) pour PDF (Windows)", value=r"C:\Program Files\poppler-24.08.0\Library\bin", key="inp_poppler_path")
     ocr_langs = st.text_input("Langues OCR (codes tesseract)", value="eng+fra", key="inp_tess_langs")
@@ -860,12 +937,17 @@ with tab_docs:
                 if translated:
                     st.caption("Document EN → FR (automatique).")
 
-                label, proba, _ = _predict_text(txt_for_model, model_docs)
+                try:
+                    label, proba, _ = _predict_text(txt_for_model, model_docs)
+                except NotFittedError:
+                    st.stop()
+
                 type_doc = detect_device_type_text(text) or "Autre"
                 st.markdown(
                     f"**Résultat :** {'🔴 Critique' if label=='Critique' else '🟢 Pas critique'} — "
                     f"**Confiance : {proba:.2f}** — **Type détecté : {type_doc}**"
                 )
+                st.altair_chart(confidence_bar(proba), use_container_width=True)
 
                 cleaned = clean_text(txt_for_model)
                 kw = top_keywords_tfidf_from_pipe(pipe_cached, cleaned, topk=15)
@@ -953,61 +1035,31 @@ with tab_hist:
     if "date_dt" in dft.columns and dft["date_dt"].notna().any():
         m = dft.dropna(subset=["date_dt"]).copy()
         m["mois"] = m["date_dt"].dt.to_period("M").dt.to_timestamp()
-        gr = m.groupby("mois").size().reset_index(name="Incidents")
+        gr = m.groupby("mois").size().reset_index(name="Incidents").sort_values("mois")
         chart = alt.Chart(gr).mark_area(opacity=0.4).encode(x="mois:T", y="Incidents:Q").properties(height=260)
         st.altair_chart(chart, use_container_width=True)
-    else:
-        st.caption("Pas de dates exploitables.")
 
-    st.markdown("**⏱️ Estimation du temps avant prochain incident (approx. Poisson)**")
-    if "date_dt" in dft.columns and dft["date_dt"].notna().any():
-        series = dft["date_dt"].dropna().sort_values()
-        if len(series) >= 5:
-            days = (series.max() - series.min()).days or 1
-            lam = len(series) / days
-            expected_gap = 1.0 / lam if lam > 0 else float("inf")
-            last_date = series.max().date()
-            next_expected = (pd.Timestamp(last_date) + pd.Timedelta(days=expected_gap)).date()
-            lam_se = sqrt(len(series)) / days
-            lam_low, lam_high = max(lam - 1.96 * lam_se, 1e-9), lam + 1.96 * lam_se
-            gap_low, gap_high = 1.0 / lam_high, 1.0 / lam_low
-            st.info(
-                f"Taux observé λ ≈ **{lam:.3f}** inc./jour — écart moyen ≈ **{expected_gap:.1f} jours**.\n"
-                f"Dernier incident: **{last_date}** → Prochain attendu autour du **{next_expected}** "
-                f"(intervalle env. **{gap_low:.1f} – {gap_high:.1f} jours**)."
-            )
+        # 🔮 Prévision simple (3 mois) par régression linéaire
+        st.markdown("**🔮 Prévision simple (3 mois)**")
+        if len(gr) >= 6:
+            from sklearn.linear_model import LinearRegression
+            X = np.arange(len(gr)).reshape(-1,1)
+            y = gr["Incidents"].values
+            reg = LinearRegression().fit(X, y)
+            horizon = 3
+            fut_idx = np.arange(len(gr), len(gr)+horizon).reshape(-1,1)
+            pred = reg.predict(fut_idx).clip(min=0)
+            fut_dates = pd.date_range(gr["mois"].iloc[-1] + pd.offsets.MonthBegin(1), periods=horizon, freq="MS")
+            df_fut = pd.DataFrame({"mois": fut_dates, "Incidents": pred})
+
+            ch_past = alt.Chart(gr).mark_line(point=True).encode(x="mois:T", y="Incidents:Q", tooltip=["mois","Incidents"])
+            ch_fut  = alt.Chart(df_fut).mark_line(point=True, strokeDash=[4,3]).encode(x="mois:T", y="Incidents:Q", tooltip=["mois","Incidents"])
+            st.altair_chart((ch_past + ch_fut).properties(height=240), use_container_width=True)
         else:
-            st.caption("Historique trop court pour estimer.")
+            st.caption("Historique trop court pour une régression linéaire (≥6 points recommandé).")
+
     else:
         st.caption("Pas de dates exploitables.")
-
-    st.markdown("**🌐 Traduction du dataset (EN → FR)**")
-    col_tr1, col_tr2 = st.columns([2, 1])
-    n_rows = col_tr1.slider("Nombre de lignes à traduire (pour test)", 100, 5000, 1000, step=100, key="tr_nrows")
-    do_all = col_tr2.toggle("Traduire tout le dataset (attention aux perfs)", value=False, key="tr_all")
-    if st.button("Lancer la traduction et exporter (Excel)", key="btn_trad_excel"):
-        txtcol = pick_text_column(df_main)
-        df_to_tr = df_main[[txtcol]].copy()
-        if not do_all:
-            df_to_tr = df_to_tr.head(n_rows).copy()
-        texts = df_to_tr[txtcol].fillna("").astype(str).tolist()
-        try:
-            trad = translate_text(texts, src="en", tgt="fr")
-        except Exception as e:
-            st.error(f"Erreur de traduction: {e}")
-            trad = texts
-        out = df_to_tr.copy()
-        out["texte_fr"] = trad
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-            out.to_excel(writer, index=False, sheet_name="DatasetFR")
-        st.download_button(
-            "⬇️ Télécharger dataset traduit (Excel)",
-            data=buf.getvalue(),
-            file_name="dataset_traduit_fr.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="dl_dataset_trad_xlsx",
-        )
 
     # 🗂️ Historique SQLite
     st.markdown("---")
@@ -1044,6 +1096,39 @@ with tab_hist:
             st.warning(f"Lecture historique indisponible ({e}).")
     else:
         st.caption("Historique désactivé (DB non initialisée).")
+
+# ---- TAB Évaluation ----
+with tab_eval:
+    st.subheader("📑 Résultats d'évaluation du modèle")
+    eval_dir = ROOT_DIR / "assets" / "eval"
+    met_path = eval_dir / "metrics.json"
+    if met_path.exists():
+        try:
+            with open(met_path, "r", encoding="utf-8") as f:
+                met = json.load(f)
+        except Exception as e:
+            met = {}
+            st.warning(f"Impossible de lire metrics.json ({e})")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Accuracy", f"{met.get('accuracy', float('nan')):.3f}")
+        c2.metric("F1-score", f"{met.get('f1', float('nan')):.3f}")
+        c3.metric("ROC-AUC", f"{met.get('roc_auc', float('nan')):.3f}")
+        c4.metric("N échantillons", f"{met.get('n_samples', 0)}")
+
+        imgs = [
+            ("Courbe ROC", eval_dir / "roc.png"),
+            ("Precision-Recall", eval_dir / "pr.png"),
+            ("Matrice de confusion", eval_dir / "cm.png"),
+            ("event_type (barres)", eval_dir / "event_type_bar.png"),
+            ("TypeDetecte (camembert)", eval_dir / "typedetecte_pie.png"),
+        ]
+        for title, p in imgs:
+            if p.exists():
+                st.markdown(f"**{title}**")
+                st.image(str(p))
+    else:
+        st.info("Aucun résultat d'évaluation trouvé. Lance d’abord : `python notebooks/eval_healthpredict.py`.")
+        st.caption("Les figures/metrics seront créées dans assets/eval/.")
 
 # -------------------------------
 # Footer

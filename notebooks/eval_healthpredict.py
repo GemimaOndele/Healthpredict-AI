@@ -1,19 +1,22 @@
 # notebooks/eval_healthpredict.py
-import os, sys, yaml, joblib, numpy as np, pandas as pd
+import os, json, yaml, joblib, re
 from pathlib import Path
-from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix, RocCurveDisplay
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.metrics import (
+    accuracy_score, f1_score, roc_auc_score, confusion_matrix,
+    RocCurveDisplay, PrecisionRecallDisplay
+)
+from sklearn.model_selection import train_test_split
 
-# ----------- chemins de base -----------
-ROOT = Path(__file__).resolve().parents[1]   # racine projet
+ROOT = Path(__file__).resolve().parents[1]
 CFG  = ROOT / "config" / "config.yaml"
+EVAL_DIR = ROOT / "assets" / "eval"
+EVAL_DIR.mkdir(parents=True, exist_ok=True)
 
-def abs_path(p: str | os.PathLike) -> Path:
-    p = str(p)
-    return Path(p) if os.path.isabs(p) else (ROOT / p).resolve()
-
-def clean_text(s):
-    import re, unicodedata
+def clean_text(s: str) -> str:
+    import unicodedata
     s = "" if s is None else str(s)
     s = unicodedata.normalize("NFKD", s).encode("ascii","ignore").decode("utf-8","ignore")
     s = s.lower()
@@ -22,165 +25,110 @@ def clean_text(s):
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-# ----------- charge config -----------
-if not CFG.exists():
-    sys.exit(f"config introuvable: {CFG}")
-
-with open(CFG, "r", encoding="utf-8") as f:
+with open(CFG,"r",encoding="utf-8") as f:
     cfg = yaml.safe_load(f)
 
-# ----------- résout chemins dataset -----------
-c_paths = cfg.get("paths", {})
-cand_csv = []
-if c_paths.get("processed_csv"):
-    cand_csv.append(abs_path(c_paths["processed_csv"]))
-# fallback processed dans assets/
-cand_csv.append(ROOT / "assets" / "data" / "processed" / "medical_imaging_text_labeled.csv")
-# raw de config
-if c_paths.get("raw_csv"):
-    cand_csv.append(abs_path(c_paths["raw_csv"]))
-# fallback raw dans assets/
-cand_csv.append(ROOT / "assets" / "data" / "raw" / "raw_openfda_imaging_reports.csv")
+# chemins normalisés
+for k, v in list(cfg.get("paths", {}).items()):
+    if not os.path.isabs(v):
+        cfg["paths"][k] = str((ROOT / v).resolve())
 
-data_csv = next((p for p in cand_csv if Path(p).exists()), None)
+processed_csv = cfg["paths"].get("processed_csv", str(ROOT / "assets" / "data" / "processed" / "medical_imaging_text_labeled.csv"))
+model_path    = cfg["paths"].get("tfidf_model", str(ROOT / "assets" / "models" / "healthpredict_model.joblib"))
 
-# si rien trouvé: essayer de télécharger via script
-if data_csv is None:
+processed_csv = str(Path(processed_csv))
+model_path    = str(Path(model_path))
+
+if not os.path.exists(processed_csv):
+    print(f"CSV introuvable: {processed_csv}")
+    # essaie de le générer
     try:
-        sys.path.insert(0, str(ROOT))
-        from scripts.download_assets import ensure_assets  # type: ignore
-        print("Assets absents → téléchargement…")
-        ensure_assets()
+        from scripts.build_processed_csv import build_processed
+        build_processed()
     except Exception as e:
-        print(f"(info) Téléchargement auto impossible : {e}")
-    # re-scan
-    data_csv = next((p for p in cand_csv if Path(p).exists()), None)
+        raise SystemExit(f"Impossible de générer le processed CSV ({e})")
 
-if data_csv is None:
-    print("❌ Aucune donnée trouvée.")
-    print("   Lance d'abord:  python scripts/download_assets.py")
-    print("   ou vérifie config.yaml > paths.processed_csv / paths.raw_csv")
-    sys.exit(1)
+if not os.path.exists(processed_csv):
+    raise SystemExit(f"Toujours introuvable: {processed_csv}")
 
-data_csv = Path(data_csv)
-print(f"✔ Dataset: {data_csv}")
+df = pd.read_csv(processed_csv)
+if not {"event_text","label"} <= set(df.columns):
+    raise SystemExit("Le processed CSV doit contenir 'event_text' et 'label'.")
 
-# ----------- modèle TF-IDF -----------
-cand_model = []
-if c_paths.get("tfidf_model"):
-    cand_model.append(abs_path(c_paths["tfidf_model"]))
-cand_model.append(ROOT / "assets" / "models" / "healthpredict_model.joblib")
+X = df["event_text"].fillna("").astype(str).map(clean_text).tolist()
+y = df["label"].astype(int).values
 
-model_path = next((p for p in cand_model if Path(p).exists()), None)
-if model_path is None:
-    print("❌ Modèle TF-IDF introuvable. Lance: python scripts/download_assets.py")
-    sys.exit(1)
-model_path = Path(model_path)
-print(f"✔ Modèle TF-IDF: {model_path}")
+# split stable pour évaluer
+test_size    = cfg.get("training",{}).get("test_size", 0.2)
+random_state = cfg.get("training",{}).get("random_state", 42)
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y if len(set(y))>1 else None)
 
-# ----------- charge dataset -----------
-df = pd.read_csv(data_csv)
-# colonne texte
-for col in ["event_text","Texte","Description","Alerte","Notes","Commentaire"]:
-    if col in df.columns:
-        text_col = col
-        break
-else:
-    text_col = df.columns[0]
+if not os.path.exists(model_path):
+    raise SystemExit(f"Modèle introuvable: {model_path}. Lance d'abord scripts/train_minimal_tfidf.py")
 
-# colonne label (1=Critique, 0=Pas critique)
-if "label" in df.columns:
-    y = df["label"].astype(int).values
-elif "Alerte" in df.columns:
-    y = df["Alerte"].astype(str).str.startswith("Critique").astype(int).values
-else:
-    sys.exit("❌ Pas de label détecté. Ajoute 'label' (0/1) ou 'Alerte' ('Critique' vs autre).")
-
-# limiter RAM si gros fichier
-max_rows = int(os.getenv("HP_EVAL_MAX_ROWS", "50000"))
-if len(df) > max_rows:
-    print(f"(info) Dataset tronqué à {max_rows} lignes sur {len(df)} pour l'évaluation.")
-    df = df.head(max_rows).copy()
-    y  = y[:max_rows]
-
-X_text = df[text_col].fillna("").astype(str).map(clean_text).tolist()
-
-# ----------- évalue TF-IDF -----------
 pipe = joblib.load(model_path)
-proba = pipe.predict_proba(X_text)[:, 1]
+proba = pipe.predict_proba(Xte)[:,1]
 pred  = (proba >= 0.5).astype(int)
 
-acc = accuracy_score(y, pred)
-f1  = f1_score(y, pred)
+acc = accuracy_score(yte, pred)
+f1  = f1_score(yte, pred, zero_division=0)
 try:
-    auc = roc_auc_score(y, proba)
+    auc = roc_auc_score(yte, proba)
 except Exception:
     auc = float("nan")
 
-print(f"\n== TF-IDF ==")
 print(f"Accuracy: {acc:.3f}  F1: {f1:.3f}  ROC-AUC: {auc:.3f}")
-cm = confusion_matrix(y, pred)
+cm = confusion_matrix(yte, pred)
 print("Confusion matrix:\n", cm)
 
-# ROC → PNG
-OUT_DIR = ROOT / "reports"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+# === Figures ===
 plt.figure()
-RocCurveDisplay.from_predictions(y, proba)
+RocCurveDisplay.from_predictions(yte, proba)
 plt.title("ROC - HealthPredict TF-IDF")
-roc_png = OUT_DIR / "roc_tfidf.png"
-plt.savefig(roc_png, dpi=120, bbox_inches="tight")
+plt.savefig(EVAL_DIR / "roc.png", dpi=150, bbox_inches="tight")
 plt.close()
-print(f"ROC sauvegardée: {roc_png}")
 
-# résultats détaillés
-res_df = pd.DataFrame({"text": X_text, "proba": proba, "pred": pred, "label": y})
-res_csv = OUT_DIR / "eval_results_tfidf.csv"
-res_df.to_csv(res_csv, index=False)
-print(f"Résultats: {res_csv}")
+plt.figure()
+PrecisionRecallDisplay.from_predictions(yte, proba)
+plt.title("Precision-Recall - HealthPredict TF-IDF")
+plt.savefig(EVAL_DIR / "pr.png", dpi=150, bbox_inches="tight")
+plt.close()
 
-# ----------- (optionnel) CamemBERT -----------
-use_cam = os.getenv("HP_USE_CAMEMBERT", "0") == "1"
-if use_cam:
-    try:
-        cand_cam = []
-        if c_paths.get("camembert_model"):
-            cand_cam.append(abs_path(c_paths["camembert_model"]))
-        cand_cam.append(ROOT / "assets" / "models" / "healthpredict_camembert_model.joblib")
-        cam_path = next((p for p in cand_cam if Path(p).exists()), None)
-        if cam_path is None:
-            print("(info) Modèle CamemBERT indisponible — skipping.")
-        else:
-            print(f"\n== CamemBERT ==")
-            import torch  # noqa
-            tok, cam, clf = joblib.load(cam_path)  # (tokenizer, camembert_model, clf)
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            cam = cam.to(device).eval()
-            batch_size = int(os.getenv("HP_CAM_BATCH", "16"))
-            probs = []
-            for i in range(0, len(X_text), batch_size):
-                seg = X_text[i:i+batch_size]
-                enc = tok(seg, padding=True, truncation=True, return_tensors="pt")
-                if device == "cuda":
-                    enc = {k: v.cuda() for k,v in enc.items()}
-                with torch.no_grad():
-                    out = cam(**enc).last_hidden_state[:,0,:].detach().cpu().numpy()
-                p = clf.predict_proba(out)[:,1]
-                probs.append(p)
-            proba_cam = np.concatenate(probs)
-            pred_cam  = (proba_cam >= 0.5).astype(int)
-            acc_c = accuracy_score(y, pred_cam); f1_c = f1_score(y, pred_cam)
-            try: auc_c = roc_auc_score(y, proba_cam)
-            except: auc_c = float("nan")
-            print(f"Accuracy: {acc_c:.3f}  F1: {f1_c:.3f}  ROC-AUC: {auc_c:.3f}")
-            plt.figure()
-            RocCurveDisplay.from_predictions(y, proba_cam)
-            plt.title("ROC - HealthPredict CamemBERT")
-            roc2 = OUT_DIR / "roc_camembert.png"
-            plt.savefig(roc2, dpi=120, bbox_inches="tight"); plt.close()
-            print(f"ROC CamemBERT sauvegardée: {roc2}")
-            res2 = OUT_DIR / "eval_results_camembert.csv"
-            pd.DataFrame({"text": X_text, "proba": proba_cam, "pred": pred_cam, "label": y}).to_csv(res2, index=False)
-            print(f"Résultats CamemBERT: {res2}")
-    except Exception as e:
-        print(f"(info) Évaluation CamemBERT ignorée: {e}")
+plt.figure()
+import seaborn as sns  # juste pour la heatmap
+sns.heatmap(cm, annot=True, fmt="d", cbar=False, cmap="Blues")
+plt.xlabel("Prédit"); plt.ylabel("Réel"); plt.title("Matrice de confusion")
+plt.savefig(EVAL_DIR / "cm.png", dpi=150, bbox_inches="tight")
+plt.close()
+
+# Répartition (bar/pie) pour l’interprétation
+if "event_type" in df.columns:
+    cnt = df["event_type"].astype(str).value_counts().head(15)
+    plt.figure(figsize=(7,4))
+    cnt.plot(kind="bar")
+    plt.title("Répartition event_type (top 15)")
+    plt.ylabel("Nombre")
+    plt.tight_layout()
+    plt.savefig(EVAL_DIR / "event_type_bar.png", dpi=150)
+    plt.close()
+
+if "TypeDetecte" in df.columns:
+    cnt2 = df["TypeDetecte"].astype(str).value_counts()
+    plt.figure(figsize=(5,5))
+    cnt2.plot(kind="pie", autopct="%1.1f%%")
+    plt.ylabel("")
+    plt.title("Répartition TypeDetecte")
+    plt.tight_layout()
+    plt.savefig(EVAL_DIR / "typedetecte_pie.png", dpi=150)
+    plt.close()
+
+# === metrics.json ===
+with open(EVAL_DIR / "metrics.json", "w", encoding="utf-8") as f:
+    json.dump({
+        "accuracy": float(acc),
+        "f1": float(f1),
+        "roc_auc": float(auc),
+        "n_samples": int(len(yte))
+    }, f, ensure_ascii=False, indent=2)
+
+print(f"[OK] Évaluation sauvegardée dans {EVAL_DIR}")
