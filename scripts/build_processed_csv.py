@@ -1,102 +1,86 @@
 # scripts/build_processed_csv.py
-import os, re, json, yaml
-from pathlib import Path
+# Génère un CSV "processed" minimal à partir du CSV brut OpenFDA.
+# Sortie : assets/data/processed/medical_imaging_text_labeled.csv
+
+from __future__ import annotations
+import os
 import pandas as pd
-import numpy as np
+from pathlib import Path
+import unicodedata, re
 
 ROOT = Path(__file__).resolve().parents[1]
-CFG  = ROOT / "config" / "config.yaml"
+RAW_CSV = ROOT / "assets" / "data" / "raw" / "raw_openfda_imaging_reports.csv"
+OUT_DIR = ROOT / "assets" / "data" / "processed"
+OUT_CSV = OUT_DIR / "medical_imaging_text_labeled.csv"
 
-def _ensure_dir(p: Path):
-    p.parent.mkdir(parents=True, exist_ok=True)
-
-def _ensure_str(x):
-    if isinstance(x, str):
-        return x
-    if x is None:
-        return ""
+def ensure_str(x):
+    if isinstance(x, str): return x
+    if x is None: return ""
     try:
         return str(x)
     except Exception:
         return ""
 
-def _pick_text_col(df: pd.DataFrame) -> str:
-    # colonnes fréquentes OpenFDA / tes données
+def clean_text(text: str) -> str:
+    text = ensure_str(text)
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("utf-8", "ignore")
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\d+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+def pick_text_column(df: pd.DataFrame) -> str:
     candidates = [
-        "event_text","mdr_text","narrative","description_of_event",
-        "event_description","summary","Texte","Description","Alerte","Notes","Commentaire"
+        "event_description", "event_text", "mdr_text", "narrative", "description",
+        "summary", "text", "report_text", "notes", "comment", "comments"
     ]
     for c in candidates:
         if c in df.columns:
-            return c
-    # sinon, on concatène toutes les colonnes texte
-    obj = [c for c in df.columns if df[c].dtype == "object"]
-    if obj:
-        df["_concat_text"] = df[obj].astype(str).fillna("").agg(" ".join, axis=1)
-        return "_concat_text"
+            if df[c].astype(str).str.len().gt(0).any():
+                return c
+    # fallback: concat de colonnes texte
+    obj_cols = df.select_dtypes(include=["object", "string"]).columns.tolist()
+    if obj_cols:
+        df["_concat_"] = df[obj_cols].astype(str).fillna("").agg(" ".join, axis=1)
+        return "_concat_"
+    # dernier recours
     return df.columns[0]
 
-def _heuristic_label(df: pd.DataFrame, text_col: str) -> pd.Series:
-    # 1) si “label” existe déjà
-    if "label" in df.columns:
-        s = pd.to_numeric(df["label"], errors="coerce").fillna(0).astype(int)
-        return s.clip(0,1)
-
-    # 2) si “Alerte” existe (Critique / Pas critique)
-    if "Alerte" in df.columns:
-        return df["Alerte"].astype(str).str.lower().str.startswith("critique").astype(int)
-
-    # 3) si “event_type” existe (Death/Injury/Malfunction => 1, sinon 0)
-    if "event_type" in df.columns:
-        crit = {"death","injury","malfunction"}
-        return df["event_type"].astype(str).str.lower().isin(crit).astype(int)
-
-    # 4) fallback mots-clés
-    text = df[text_col].astype(str).str.lower().fillna("")
-    kw_pos = [
-        "death","fatal","injury","serious","critical","fire","smoke","burn",
-        "electric shock","overheat","leak","failure","broken","hazard","risk"
-    ]
-    pat = r"(" + "|".join(map(re.escape, kw_pos)) + r")"
-    return text.str.contains(pat, regex=True, na=False).astype(int)
-
 def build_processed():
-    with open(CFG, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    if not RAW_CSV.exists():
+        raise FileNotFoundError(f"CSV brut introuvable: {RAW_CSV}")
 
-    raw_csv = cfg["paths"].get("raw_csv", str(ROOT / "assets" / "data" / "raw" / "raw_openfda_imaging_reports.csv"))
-    out_csv = cfg["paths"].get("processed_csv", str(ROOT / "assets" / "data" / "processed" / "medical_imaging_text_labeled.csv"))
-    raw_csv = str((ROOT / raw_csv).resolve()) if not os.path.isabs(raw_csv) else raw_csv
-    out_csv = str((ROOT / out_csv).resolve()) if not os.path.isabs(out_csv) else out_csv
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    if not os.path.exists(raw_csv):
-        raise SystemExit(f"RAW CSV introuvable: {raw_csv}")
-
-    df = pd.read_csv(raw_csv)
+    df = pd.read_csv(RAW_CSV, low_memory=False)
     if df.empty:
-        raise SystemExit("Le RAW CSV est vide.")
+        raise RuntimeError("Le CSV brut est vide.")
 
-    # colonne texte
-    text_col = _pick_text_col(df)
-    df["event_text"] = df[text_col].astype(str).fillna("")
+    tcol = pick_text_column(df)
+    df["_txt_"] = df[tcol].astype(str).fillna("").str.strip()
 
-    # label
-    df["label"] = _heuristic_label(df, "event_text").astype(int)
-    df["Alerte"] = np.where(df["label"] == 1, "Critique", "Pas critique")
+    # Mapping binaire "Alerte" depuis event_type (si dispo)
+    if "event_type" in df.columns:
+        crit = df["event_type"].astype(str).str.lower().isin({"death", "injury"})
+        df["_alerte_"] = crit.map({True: "Critique", False: "Pas critique"})
+    else:
+        # Sans colonne event_type -> tout en "Pas critique" (entraînement possible mais moins pertinent)
+        df["_alerte_"] = "Pas critique"
 
-    # colonnes utiles si dispo
-    keep = ["event_text","label","Alerte","event_type","date_received","brand_name","generic_name"]
-    keep = [c for c in keep if c in df.columns] + ["event_text","label","Alerte"]
-    keep = list(dict.fromkeys(keep))  # unique & order
+    # Garde quelques colonnes utiles
+    keep = ["_txt_", "_alerte_"]
+    if "event_type" in df.columns: keep.append("event_type")
+    if "date_received" in df.columns: keep.append("date_received")
+    out = df[keep].rename(columns={"_txt_": "Texte", "_alerte_": "Alerte"}).copy()
 
-    out = df[keep].copy()
+    # Nettoyage basique + filtrage
+    out["Texte"] = out["Texte"].astype(str).fillna("").map(lambda s: s.strip())
+    out = out[out["Texte"].str.len() >= 5].drop_duplicates(subset=["Texte"])
 
-    out_path = Path(out_csv)
-    _ensure_dir(out_path)
-    out.to_csv(out_path, index=False, encoding="utf-8")
-    crit = int(out["label"].sum())
-    print(f"[OK] Processed sauvegardé → {out_path}")
-    print(f"     Lignes: {len(out)} | Critiques: {crit} | Non-critiques: {len(out)-crit}")
+    # Sauvegarde
+    out.to_csv(OUT_CSV, index=False)
+    print(f"[ok] Processed CSV écrit: {OUT_CSV} (lignes={len(out)})")
 
 if __name__ == "__main__":
     build_processed()

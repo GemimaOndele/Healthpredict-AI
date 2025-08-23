@@ -6,72 +6,48 @@
    4) (option) évalue si HP_RUN_EVAL=1
    5) lance Streamlit
 #>
-
-$ErrorActionPreference = 'Stop'
-
-# --- Racine projet ---
-$ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $ROOT
-
-# --- (option) Activer venv ---
-$venvCandidates = @(
-    (Join-Path $ROOT ".henv\Scripts\Activate.ps1")
-    (Join-Path $ROOT "venv\Scripts\Activate.ps1")
-    (Join-Path $ROOT ".venv\Scripts\Activate.ps1")
+Param(
+  [int]$Port = 8501
 )
-$activated = $false
-foreach ($cand in $venvCandidates) {
-    if (Test-Path $cand) {
-        Write-Host "🔹 Activation venv: $cand"
-        . $cand
-        $activated = $true
-        break
-    }
+
+Write-Host "🔹 Activation venv (.henv)" -ForegroundColor Cyan
+$venv = Join-Path $PSScriptRoot ".henv\Scripts\Activate.ps1"
+if (!(Test-Path $venv)) {
+  Write-Host "⚠️ .henv introuvable, création..." -ForegroundColor Yellow
+  python -m venv .henv
 }
-if (-not $activated) {
-    Write-Host "ℹ️ Aucun venv détecté (.henv/venv/.venv). Python global utilisé."
-}
+. $venv
 
-# --- Vars d'env utiles ---
-$env:HP_USE_CAMEMBERT = "1"   # active CamemBERT si dispo
+Write-Host "📦 pip install -r requirements.txt" -ForegroundColor Cyan
+pip install --upgrade pip
+pip install -r requirements.txt
 
-# --- 1) spaCy models (idempotent) ---
-Write-Host "⬇️ spaCy: en_core_web_sm"
-& python -m spacy download en_core_web_sm
-if ($LASTEXITCODE -ne 0) { Write-Warning "en_core_web_sm non installé (ok si déjà présent)." }
+# (optionnel) Torch CPU déjà installé chez vous, sinon:
+#pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
-Write-Host "⬇️ spaCy: fr_core_news_sm"
-& python -m spacy download fr_core_news_sm
-if ($LASTEXITCODE -ne 0) { Write-Warning "fr_core_news_sm non installé (ok si déjà présent)." }
-
-# --- 2) Assets (CSV/modèles) ---
-if (Test-Path (Join-Path $ROOT "scripts\download_assets.py")) {
-    Write-Host "⬇️ Téléchargement des assets…"
-    & python -m scripts.download_assets
-    if ($LASTEXITCODE -ne 0) { Write-Warning "download_assets a renvoyé un code ≠ 0 (peut être normal si déjà présents)." }
+# spaCy modèles: uniquement si demandé
+if ($env:HP_USE_SPACY -eq "1") {
+  Write-Host "⬇️ spaCy models (fr/en)..." -ForegroundColor Cyan
+  python -c "import spacy" 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "spaCy non installé ? (pip l’a pourtant installé). On continue." -ForegroundColor Yellow
+  }
+  python -m spacy download fr_core_news_sm
+  python -m spacy download en_core_web_sm
 } else {
-    Write-Warning "scripts\download_assets.py introuvable — étape ignorée."
+  Write-Host "⏭️ HP_USE_SPACY≠1 → on n'installe pas les modèles spaCy." -ForegroundColor DarkGray
 }
 
-# --- 3) (option) Évaluation ---
-if ($env:HP_RUN_EVAL -eq "1") {
-    $evalScript = Join-Path $ROOT "notebooks\eval_healthpredict.py"
-    if (Test-Path $evalScript) {
-        Write-Host "🧪 Évaluation du modèle…"
-        & python $evalScript
-        if ($LASTEXITCODE -ne 0) { Write-Warning "Évaluation terminée avec un code ≠ 0 (vérifie config/config.yaml & assets)." }
-    } else {
-        Write-Warning "notebooks\eval_healthpredict.py introuvable — étape ignorée."
-    }
-} else {
-    Write-Host "⏭️ Évaluation sautée (définis HP_RUN_EVAL=1 pour l’activer)."
-}
+# Assets (modèles déjà publiés sur Hugging Face)
+Write-Host "⬇️ Téléchargement des assets…" -ForegroundColor Cyan
+python -c "import huggingface_hub" 2>$null
+if ($LASTEXITCODE -ne 0) { pip install huggingface_hub }
+python scripts/download_assets.py
 
-# --- 4) Streamlit ---
-$addr = "0.0.0.0"
-$port = if ($env:PORT) { $env:PORT } else { "8501" }
-$app  = Join-Path $ROOT "app\healthpredict_app.py"
-if (-not (Test-Path $app)) { throw "Fichier app introuvable: $app" }
+# DB par défaut si non définie
+if (-not $env:HP_DB) { $env:HP_DB = (Join-Path $PSScriptRoot "data\app.db") }
 
-Write-Host "🚀 Lancement Streamlit sur ${addr}:${port}"
-& python -m streamlit run $app --server.address=$addr --server.port=$port
+# Lancer Streamlit
+Write-Host ""
+Write-Host "🚀 Lancement Streamlit sur 0.0.0.0:$Port" -ForegroundColor Green
+streamlit run app/healthpredict_app.py --server.address=0.0.0.0 --server.port=$Port

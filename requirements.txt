@@ -12,6 +12,7 @@ python-dotenv>=1.0,<2
 # --- Utils / Fichiers / OCR ---
 requests>=2.31
 huggingface_hub>=0.21
+huggingface_hub[hf_xet]
 pillow>=10.3
 pytesseract>=0.3.10
 pdf2image>=1.17
@@ -26,6 +27,3 @@ tqdm>=4.66
 transformers>=4.42,<5
 sentencepiece>=0.2,<0.3
 shap>=0.45,<0.50
-spacy>=3.7,<4
-
-seaborn
