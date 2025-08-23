@@ -1,53 +1,46 @@
 # hpdb.py
-# Mini couche SQLite: init, insertion, requêtes d'historique
-
+# Mini couche SQLite: init, insertion, requêtes d'historique (avec ts auto)
 from __future__ import annotations
-import sqlite3, json, os
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+import sqlite3, json, os, pathlib, datetime as dt
+from typing import Iterable, Dict, Any, List, Optional
 
-# Dossier data/ par défaut à la racine du projet
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-DATA_DIR.mkdir(exist_ok=True, parents=True)
+_DB_PATH: Optional[str] = None
 
-# Chemin DB configurable via HP_DB, sinon data/app.db
-DB_PATH_ENV = os.environ.get("HP_DB", str(DATA_DIR / "app.db"))
+def _ensure_parent_dir(path: str) -> None:
+    pathlib.Path(os.path.dirname(path)).mkdir(parents=True, exist_ok=True)
 
-def _connect(db_path: Optional[str] = None) -> sqlite3.Connection:
-    path = db_path or DB_PATH_ENV
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
+def _connect(path_override: Optional[str] = None) -> sqlite3.Connection:
+    dbp = path_override or _DB_PATH
+    if not dbp:
+        raise RuntimeError("DB non initialisée. Appelez init_db() d’abord.")
+    conn = sqlite3.connect(dbp, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db(db_path: Optional[str] = None) -> None:
-    """Crée le fichier DB + la table si besoin."""
-    path = db_path or DB_PATH_ENV
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with _connect(path) as con:
-        cur = con.cursor()
-        cur.execute("""
+def init_db(db_path: str = "data/app.db") -> None:
+    """Crée le fichier + tables si besoin puis retient le chemin par défaut."""
+    global _DB_PATH
+    _DB_PATH = db_path
+    _ensure_parent_dir(db_path)
+    with _connect() as con:
+        con.execute("""
         CREATE TABLE IF NOT EXISTS predictions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-            source TEXT,
-            file_name TEXT,
-            input_text TEXT,
-            cleaned_text TEXT,
-            model_type TEXT,
-            label TEXT,
-            proba REAL,
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts            TEXT NOT NULL,
+            source        TEXT NOT NULL,     -- 'input' | 'doc'
+            file_name     TEXT,
+            input_text    TEXT,
+            cleaned_text  TEXT,
+            model_type    TEXT,              -- 'TFIDF' | 'CamemBERT'
+            label         TEXT,              -- 'Critique' | 'Pas critique'
+            proba         REAL,
             detected_type TEXT,
-            src_lang TEXT,
-            translated INTEGER,
-            top_keywords TEXT
-        );
+            src_lang      TEXT,
+            translated    INTEGER,           -- 0/1
+            top_keywords  TEXT               -- JSON: [["mot", pct], ...]
+        )
         """)
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_pred_ts ON predictions(ts);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_pred_source ON predictions(source);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_pred_file ON predictions(file_name);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_pred_label ON predictions(label);")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_predictions_ts ON predictions(ts DESC)")
         con.commit()
 
 def insert_prediction(
@@ -59,48 +52,51 @@ def insert_prediction(
     model_type: str,
     label: str,
     proba: float,
-    detected_type: Optional[str] = None,
-    src_lang: Optional[str] = None,
-    translated: bool = False,
-    top_keywords: Optional[List] = None,
+    detected_type: str,
+    src_lang: str,
+    translated: bool,
+    top_keywords: Optional[Iterable] = None,
     db_path: Optional[str] = None,
 ) -> int:
-    """Insère une prédiction et renvoie l'id."""
-    payload = json.dumps(top_keywords or [], ensure_ascii=False)
+    """Insère une ligne et renvoie l'id (ts auto en UTC)."""
+    if top_keywords is None:
+        top_keywords = []
+    payload = json.dumps(list(top_keywords), ensure_ascii=False)
+
+    ts = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
     with _connect(db_path) as con:
-        cur = con.cursor()
-        cur.execute("""
+        cur = con.execute("""
             INSERT INTO predictions
-            (source, file_name, input_text, cleaned_text, model_type, label, proba,
+            (ts, source, file_name, input_text, cleaned_text, model_type, label, proba,
              detected_type, src_lang, translated, top_keywords)
-            VALUES
-            (:source, :file_name, :input_text, :cleaned_text, :model_type, :label, :proba,
-             :detected_type, :src_lang, :translated, :top_keywords)
-        """, {
-            "source": source,
-            "file_name": file_name,
-            "input_text": input_text,
-            "cleaned_text": cleaned_text,
-            "model_type": model_type,
-            "label": label,
-            "proba": float(proba) if proba is not None else None,
-            "detected_type": detected_type,
-            "src_lang": src_lang,
-            "translated": 1 if translated else 0,
-            "top_keywords": payload,
-        })
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            ts,
+            source,
+            file_name,
+            input_text,
+            cleaned_text,
+            model_type,
+            label,
+            float(proba),
+            detected_type,
+            src_lang,
+            1 if translated else 0,
+            payload
+        ))
         con.commit()
         return int(cur.lastrowid)
 
 def fetch_recent_predictions(limit: int = 200, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     with _connect(db_path) as con:
-        cur = con.cursor()
-        cur.execute("""
-            SELECT * FROM predictions
-            ORDER BY datetime(ts) DESC
+        rows = con.execute("""
+            SELECT id, ts, source, file_name, model_type, label, proba,
+                   detected_type, src_lang, translated, top_keywords
+            FROM predictions
+            ORDER BY ts DESC
             LIMIT ?
-        """, (int(limit),))
-        rows = cur.fetchall()
+        """, (int(limit),)).fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -111,17 +107,17 @@ def fetch_recent_predictions(limit: int = 200, db_path: Optional[str] = None) ->
         out.append(d)
     return out
 
-def search_predictions(query: str, limit: int = 200, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    q = f"%{query.strip()}%"
+def search_predictions(q: str, limit: int = 100, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    like = f"%{q}%"
     with _connect(db_path) as con:
-        cur = con.cursor()
-        cur.execute("""
-            SELECT * FROM predictions
+        rows = con.execute("""
+            SELECT id, ts, source, file_name, model_type, label, proba,
+                   detected_type, src_lang, translated, top_keywords
+            FROM predictions
             WHERE COALESCE(file_name,'') LIKE ? OR COALESCE(input_text,'') LIKE ?
-            ORDER BY datetime(ts) DESC
+            ORDER BY ts DESC
             LIMIT ?
-        """, (q, q, int(limit)))
-        rows = cur.fetchall()
+        """, (like, like, int(limit))).fetchall()
     out = []
     for r in rows:
         d = dict(r)

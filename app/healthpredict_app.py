@@ -54,19 +54,35 @@ except Exception:
     pass
 
 def _safe_ensure_assets():
-    """Appelle scripts/download_assets.ensure_assets() si dispo."""
-    try:
-        from scripts.download_assets import ensure_assets  # nécessite ROOT_DIR dans sys.path
-    except Exception as e:
-        st.caption(f"ℹ️ Téléchargement des assets ignoré: {e}")
+    """Télécharge les assets si possible, sinon silencieux (1 seule fois)."""
+    if os.environ.get("HP_AUTO_DOWNLOAD", "1") != "1":
         return
+    if st.session_state.get("_assets_checked_", False):
+        return
+    st.session_state["_assets_checked_"] = True
+
     try:
-        if os.environ.get("HP_AUTO_DOWNLOAD", "1") == "1":
-            ensure_assets()
+        # 1) Essai import standard
+        try:
+            from scripts.download_assets import ensure_assets
+        except ModuleNotFoundError:
+            # 2) Fallback: import direct par chemin
+            import importlib.util
+            cand = ROOT_DIR / "scripts" / "download_assets.py"
+            if not cand.exists():
+                st.caption("ℹ️ Téléchargement des assets ignoré (module absent).")
+                return
+            spec = importlib.util.spec_from_file_location("download_assets", str(cand))
+            mod = importlib.util.module_from_spec(spec)  # type: ignore
+            assert spec and spec.loader
+            spec.loader.exec_module(mod)  # type: ignore
+            ensure_assets = mod.ensure_assets  # type: ignore
+
+        # 3) Lancer le téléchargement si nécessaire
+        ensure_assets()
     except Exception as e:
         st.warning(f"Téléchargement des assets échoué: {e}")
 
-_safe_ensure_assets()
 
 # ----- Base SQLite (optionnel) -----
 DB_ENABLED = True
@@ -792,7 +808,8 @@ with tab_pred:
         # 💾 Enregistrer dans SQLite (si activée)
         if DB_ENABLED:
             try:
-                model_name = "CamemBERT" if model_type.startswith("CamemBERT") and USE_CAMEMBERT else "TFIDF"
+                model_name = "CamemBERT" if (model_type.startswith("CamemBERT") and USE_CAMEMBERT) else "TFIDF"
+                type_pred = detect_device_type_text(txt_for_model) or "Autre"
                 db.insert_prediction(
                     source="input",
                     file_name=None,
@@ -801,15 +818,17 @@ with tab_pred:
                     model_type=model_name,
                     label=label,
                     proba=proba,
-                    detected_type=detect_device_type_text(txt_for_model) or "Autre",
-                    src_lang=("en" if translated else "fr") if lang_choice == "Auto" else ("fr" if lang_choice=="Français" else "en"),
+                    detected_type=type_pred,
+                    src_lang=("en" if translated else "fr") if lang_choice == "Auto"
+                             else ("fr" if lang_choice == "Français" else "en"),
                     translated=bool(translated),
                     top_keywords=(kw or []),
-                    db_path=DB_PATH,  # ✅ garantir le même fichier DB
+                    db_path=DB_PATH,  # on force la même DB que celle initialisée
                 )
                 st.caption("💾 Enregistré dans l’historique (SQLite).")
             except Exception as e:
                 st.warning(f"Historique non enregistré ({e}).")
+
 
         st.subheader("🧠 Mots-clés (pondération TF-IDF)")
         if kw:
