@@ -1,21 +1,19 @@
+# ===================== app/healthpredict_app.py =====================
 # -*- coding: utf-8 -*-
 # HealthPredict AI — Dashboard + Prédiction + 📎 Documents + 📚 Historique & Prévisions + 📑 Évaluation
 # OCR images & PDF (Tesseract + Poppler, optionnel), Similarité historique, Traduction FR (optionnel),
 # Exports CSV/Excel, Historique SQLite (optionnel)
 
-# app/healthpredict_app.py
 import os, io, sys, json, joblib, yaml, warnings, unicodedata, re
 from pathlib import Path
 import streamlit as st
 import pandas as pd
 import altair as alt
-import matplotlib.pyplot as plt  # noqa: F401 (utile parfois dans expander)
+import matplotlib.pyplot as plt  # noqa: F401
 import numpy as np
 import datetime as dt  # noqa: F401
-from math import sqrt
 from typing import Optional, Tuple, List
 from sklearn.exceptions import NotFittedError
-import hpdb as db.
 
 # ========= Fix chemins: ajouter la racine du projet au PYTHONPATH =========
 APP_DIR = Path(__file__).resolve().parent            # .../app
@@ -29,8 +27,8 @@ st.set_page_config(page_title="HealthPredict AI", layout="wide")
 # =========================
 # Options lourdes (désactivables via env)
 # =========================
-USE_CAMEMBERT = os.getenv("HP_USE_CAMEMBERT", "0") == "1"  # active aussi Transformers/torch si 1
-USE_SPACY     = os.getenv("HP_USE_SPACY", "0") == "1"      # extras UI
+USE_CAMEMBERT = os.getenv("HP_USE_CAMEMBERT", "0") == "1"
+USE_SPACY     = os.getenv("HP_USE_SPACY", "0") == "1"
 
 # ==== ML / NLP (imports légers, chargements lourds en lazy) ====
 try:
@@ -73,12 +71,13 @@ _safe_ensure_assets()
 # ----- Base SQLite (optionnel) -----
 DB_ENABLED = True
 try:
-    import hpdb as db  # <- utilise notre module local, pas le package 'db' de site-packages
+    import hpdb as db  # notre module local hpdb.py (ROOT_DIR déjà dans sys.path)
     DB_PATH = os.environ.get("HP_DB", str(ROOT_DIR / "data" / "app.db"))
     db.init_db(DB_PATH)
+    st.caption(f"DB utilisée : {DB_PATH}")
 except Exception as e:
     DB_ENABLED = False
-    st.caption(f"Historique SQLite désactivé (DB non initialisée) — {e}")
+    st.caption(f"Historique SQLite désactivé (DB non initialisée). Détail: {e}")
 
 # ----- parsers optionnels -----
 try:
@@ -110,7 +109,7 @@ except Exception:
 
 warnings.filterwarnings("ignore")
 
-# --- spaCy optionnel (pour extras UI, pas dans le pipeline TF-IDF) ---
+# --- spaCy optionnel (pour extras UI) ---
 SPACY_READY = False
 if USE_SPACY:
     try:
@@ -162,7 +161,6 @@ def load_cfg():
     return cfg
 
 def ensure_str(x):
-    """Retourne une chaîne sûre ('' pour NaN/None)."""
     if isinstance(x, str):
         return x
     if x is None:
@@ -187,12 +185,6 @@ def clean_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-def to_numeric(df: pd.DataFrame, cols):
-    for c in cols:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df
-
 @st.cache_data
 def load_csv_safe(path_csv: str) -> pd.DataFrame:
     if os.path.exists(path_csv):
@@ -205,29 +197,24 @@ def load_csv_safe(path_csv: str) -> pd.DataFrame:
 @st.cache_data
 def load_main_dataset(cfg) -> pd.DataFrame:
     paths = cfg.get("paths", {})
-
-    # 1) processed_csv (config puis fallback assets/)
+    # 1) processed_csv
     cand_processed = []
     if paths.get("processed_csv"):
         cand_processed.append(paths["processed_csv"])
     cand_processed.append(str(ROOT_DIR / "assets" / "data" / "processed" / "medical_imaging_text_labeled.csv"))
-
     for p in cand_processed:
         df = load_csv_safe(p)
         if not df.empty:
             return df
-
-    # 2) raw_csv (config puis fallback assets/)
+    # 2) raw_csv
     cand_raw = []
     if paths.get("raw_csv"):
         cand_raw.append(paths["raw_csv"])
     cand_raw.append(str(ROOT_DIR / "assets" / "data" / "raw" / "raw_openfda_imaging_reports.csv"))
-
     for p in cand_raw:
         df = load_csv_safe(p)
         if not df.empty:
             return df
-
     return pd.DataFrame()
 
 # ====== reco pour Recommandation ======
@@ -313,7 +300,6 @@ def load_camembert(path):
 
 def _vectorizer_is_fitted(vec) -> bool:
     try:
-        # TfidfVectorizer fitted → vocabulary_ existe ET _tfidf.idf_ existe
         return hasattr(vec, "vocabulary_") and hasattr(vec, "_tfidf") and hasattr(vec._tfidf, "idf_")
     except Exception:
         return False
@@ -336,7 +322,6 @@ def camembert_proba_fn(texts, tokenizer, camembert, clf):
 def get_vectorizer_from_pipeline(pipe):
     if hasattr(pipe, "named_steps"):
         for _, step in pipe.named_steps.items():
-            # TfidfVectorizer a get_feature_names_out
             if hasattr(step, "get_feature_names_out"):
                 return step
     return None
@@ -521,13 +506,6 @@ def detect_device_type_text(txt) -> Optional[str]:
             return lab
     return None
 
-def detect_device_type_row(generic, brand, text) -> str:
-    for s in (generic, brand, text):
-        lab = detect_device_type_text(s)
-        if lab:
-            return lab
-    return "Autre"
-
 def pick_text_column(df: pd.DataFrame) -> str:
     for c in ["event_text", "Texte", "Description", "Alerte", "Notes", "Commentaire"]:
         if c in df.columns:
@@ -651,7 +629,7 @@ if df_main.empty:
     st.error("Aucune donnée chargée (processed/raw). Vérifiez vos chemins de données dans config.yaml.")
     st.stop()
 
-# ✅ Limitation douce pour préserver la RAM (modifiable via variable d'env)
+# ✅ Limitation RAM
 MAX_ROWS_UI = int(os.getenv("HP_MAX_ROWS_UI", "200000"))
 if len(df_main) > MAX_ROWS_UI:
     st.info(f"Aperçu limité aux {MAX_ROWS_UI} lignes sur {len(df_main)} (pour préserver la mémoire).")
@@ -711,7 +689,6 @@ with tab_dash:
     else:
         st.caption("Pas de dates exploitables pour la tendance.")
 
-    # Répartition par type d'événement
     st.subheader("📊 Répartition par type d'événement")
     if "event_type" in df_view.columns and df_view["event_type"].notna().any():
         cnt = df_view["event_type"].astype(str).value_counts().reset_index()
@@ -723,7 +700,6 @@ with tab_dash:
     else:
         st.caption("Pas de colonne event_type.")
 
-    # Répartition par type détecté (camembert)
     st.subheader("🧩 Répartition par type détecté")
     if "TypeDetecte" in df_view.columns and df_view["TypeDetecte"].notna().any():
         cnt2 = df_view["TypeDetecte"].astype(str).value_counts().reset_index()
@@ -738,7 +714,6 @@ with tab_dash:
 # ---- TAB Prédiction (texte saisi) ----
 @st.cache_resource
 def _pipe_tfidf(path):
-    # chemin config puis fallback /assets
     p = path
     if not os.path.exists(p):
         fb = str(ROOT_DIR / "assets" / "models" / "healthpredict_model.joblib")
@@ -747,7 +722,7 @@ def _pipe_tfidf(path):
     if not os.path.exists(p):
         st.error("Modèle TF-IDF introuvable. Activez HP_AUTO_DOWNLOAD=1 (scripts/download_assets.py) "
                  "ou placez assets/models/healthpredict_model.joblib. "
-                 "Sinon, exécutez une fois: python scripts/train_minimal_tfidf.py")
+                 "Sinon, exécutez: python scripts/train_minimal_tfidf.py")
         raise FileNotFoundError("healthpredict_model.joblib not found")
     return load_tfidf_model(p)
 
@@ -759,23 +734,26 @@ def _camembert(path):
         if os.path.exists(fb):
             p = fb
     if not os.path.exists(p):
-        st.error("Modèle CamemBERT introuvable. Activez HP_AUTO_DOWNLOAD=1 (scripts/download_assets.py) "
-                 "ou placez assets/models/healthpredict_camembert_model.joblib.")
-    return load_camembert(p)
+        return None
+    try:
+        return load_camembert(p)  # (tokenizer, camembert_model, clf)
+    except Exception:
+        return None
 
-def _predict_text(txt_for_model, which: str) -> Tuple[str, float, List[Tuple[str, float]]]:
+def _predict_text(txt_for_model, which: str) -> Tuple[str, float, Optional[List[Tuple[str, float]]]]:
     cleaned = clean_text(txt_for_model)
-    if which == "CamemBERT + IA":
-        if not USE_CAMEMBERT:
-            st.info("CamemBERT désactivé — utilisation du modèle TF-IDF.")
-        else:
+    if which == "CamemBERT + IA" and USE_CAMEMBERT:
+        cm = _camembert(cfg["paths"]["camembert_model"])
+        if cm is not None:
             try:
-                tok, cam, clf = _camembert(cfg["paths"]["camembert_model"])
+                tok, cam, clf = cm
                 proba = float(camembert_proba_fn([cleaned], tok, cam, clf)[0])
                 label = "Critique" if proba >= 0.5 else "Pas critique"
                 return label, proba, None
             except Exception as e:
                 st.info(f"CamemBERT indisponible ({e}). Bascule TF-IDF.")
+        else:
+            st.caption("Modèle CamemBERT manquant — utilisation du TF-IDF.")
     # TF-IDF
     pipe = _pipe_tfidf(cfg["paths"]["tfidf_model"])
     try:
@@ -827,6 +805,7 @@ with tab_pred:
                     src_lang=("en" if translated else "fr") if lang_choice == "Auto" else ("fr" if lang_choice=="Français" else "en"),
                     translated=bool(translated),
                     top_keywords=(kw or []),
+                    db_path=DB_PATH,  # ✅ garantir le même fichier DB
                 )
                 st.caption("💾 Enregistré dans l’historique (SQLite).")
             except Exception as e:
@@ -957,24 +936,7 @@ with tab_docs:
                     for mot, pct in kw:
                         all_kw_rows.append({"Fichier": up.name, "Mot-clé": mot, "Contribution %": pct})
 
-                if use_sim_docs and pipe_hist is not None:
-                    st.caption("🔎 Cas similaires (top-5)")
-                    sims = top_similar(txt_for_model, pipe_hist, X_hist, norms_hist, df_main, text_col_main, k=5)
-                    if sims:
-                        rows = []
-                        for s, r in sims:
-                            extrait = ensure_str(r.get(text_col_main, ""))
-                            rows.append({
-                                "Similarité": round(100*s,1),
-                                "Date": ensure_str(r.get("date_received", r.get("date_dt", ""))),
-                                "Type détecté": ensure_str(r.get("TypeDetecte", "")),
-                                "Extrait": (extrait[:200] + "…") if len(extrait) > 200 else extrait,
-                            })
-                        st.dataframe(pd.DataFrame(rows), use_container_width=True)
-                    else:
-                        st.caption("Aucun similaire trouvé.")
-
-                # 💾 Enregistrer dans SQLite (si activée)
+                # 💾 Enregistrer dans SQLite
                 if DB_ENABLED:
                     try:
                         model_name = "CamemBERT" if model_docs.startswith("CamemBERT") and USE_CAMEMBERT else "TFIDF"
@@ -982,7 +944,7 @@ with tab_docs:
                             source="doc",
                             file_name=up.name,
                             input_text=txt_for_model,
-                            cleaned_text=clean_text(txt_for_model),
+                            cleaned_text=cleaned,
                             model_type=model_name,
                             label=label,
                             proba=proba,
@@ -990,6 +952,7 @@ with tab_docs:
                             src_lang=("en" if translated else "fr") if lang_docs == "Auto" else ("fr" if lang_docs=="Français" else "en"),
                             translated=bool(translated),
                             top_keywords=(kw or []),
+                            db_path=DB_PATH,  # ✅ même DB
                         )
                         st.caption("💾 Enregistré dans l’historique (SQLite).")
                     except Exception as e:
@@ -1038,9 +1001,7 @@ with tab_hist:
         gr = m.groupby("mois").size().reset_index(name="Incidents").sort_values("mois")
         chart = alt.Chart(gr).mark_area(opacity=0.4).encode(x="mois:T", y="Incidents:Q").properties(height=260)
         st.altair_chart(chart, use_container_width=True)
-
-        # 🔮 Prévision simple (3 mois) par régression linéaire
-        st.markdown("**🔮 Prévision simple (3 mois)**")
+        # 🔮 Prévision simple (3 mois)
         if len(gr) >= 6:
             from sklearn.linear_model import LinearRegression
             X = np.arange(len(gr)).reshape(-1,1)
@@ -1051,13 +1012,11 @@ with tab_hist:
             pred = reg.predict(fut_idx).clip(min=0)
             fut_dates = pd.date_range(gr["mois"].iloc[-1] + pd.offsets.MonthBegin(1), periods=horizon, freq="MS")
             df_fut = pd.DataFrame({"mois": fut_dates, "Incidents": pred})
-
             ch_past = alt.Chart(gr).mark_line(point=True).encode(x="mois:T", y="Incidents:Q", tooltip=["mois","Incidents"])
             ch_fut  = alt.Chart(df_fut).mark_line(point=True, strokeDash=[4,3]).encode(x="mois:T", y="Incidents:Q", tooltip=["mois","Incidents"])
             st.altair_chart((ch_past + ch_fut).properties(height=240), use_container_width=True)
         else:
             st.caption("Historique trop court pour une régression linéaire (≥6 points recommandé).")
-
     else:
         st.caption("Pas de dates exploitables.")
 
@@ -1066,9 +1025,10 @@ with tab_hist:
     st.subheader("🗂️ Historique des prédictions (SQLite)")
     if DB_ENABLED:
         try:
-            search_q = st.text_input("Rechercher (nom de fichier ou texte)", value="", key="hist_search_q")
-            limit = st.number_input("Nb max", min_value=10, max_value=1000, value=200, step=10, key="hist_limit")
-            rows = db.search_predictions(search_q.strip(), limit=int(limit)) if search_q.strip() else db.fetch_recent_predictions(limit=int(limit))
+            col_a, col_b = st.columns([2,1])
+            search_q = col_a.text_input("Rechercher (nom de fichier ou texte)", value="", key="hist_search_q")
+            limit = col_b.number_input("Nb max", min_value=10, max_value=1000, value=200, step=10, key="hist_limit")
+            rows = db.search_predictions(search_q.strip(), limit=int(limit), db_path=DB_PATH) if search_q.strip() else db.fetch_recent_predictions(limit=int(limit), db_path=DB_PATH)
             if not rows:
                 st.caption("Aucune prédiction enregistrée pour le moment.")
             else:

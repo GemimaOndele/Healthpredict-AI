@@ -1,34 +1,10 @@
-# config.toml — Configuration Streamlit pour HealthPredict AI
-
-# 1) Dossier projet
-$proj = "C:\Healthpredict-AI-clean"
-
-# 2) Corriger le dossier .streamlit au bon endroit (dans ton HOME)
-$homeCfgDir = Join-Path $HOME ".streamlit"
-New-Item -ItemType Directory -Force -Path $homeCfgDir | Out-Null
-
-# 3) Ecrire un config.toml propre
-@'
 [server]
-address = "localhost"
-port = 8501
 headless = true
-enableCORS = true
-enableXsrfProtection = true
-maxMessageSize = 400
+port = 8502
 
 [client]
-toolbarMode = "minimal"
+showErrorDetails = true
 
 [theme]
-primaryColor = "#2C6E91"
-backgroundColor = "#F5F5F5"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#000000"
-font = "sans serif"
-'@ | Set-Content -Encoding utf8 (Join-Path $homeCfgDir "config.toml")
-
-# (facultatif) si j'avais un .streamli dans le projet, on le renomme/retire
-if (Test-Path (Join-Path $proj ".streamli")) {
-  Rename-Item -Force (Join-Path $proj ".streamli") (Join-Path $proj ".streamli.bak")
-}
+base = "light"
+primaryColor = "#F63366"
