@@ -79,6 +79,7 @@ streamlit run app/healthpredict_app.py
 ## Ouvre le lien pour voir l'application IA
 http://localhost:8501
 
+```
 
 
 
