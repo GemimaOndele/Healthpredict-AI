@@ -81,9 +81,9 @@ http://localhost:8501
 
 
 
----
 
-###🛠️ Maintenance & Dépannage**  
+
+## 🛠️ Maintenance & Dépannage
 
 ### 🔄 Réentraînement des modèles
 
@@ -131,4 +131,4 @@ http://localhost:8501
 * Les modèles sont aussi disponibles sur [Hugging Face](https://huggingface.co/?activityType=update-dataset&feedType=user).
 
 
----
+
