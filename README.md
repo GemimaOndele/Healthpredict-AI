@@ -78,3 +78,61 @@ streamlit run app/healthpredict_app.py
 
 ## Ouvre le lien pour voir l'application IA
 http://localhost:8501
+
+
+
+Parfait 👍 ton README.md est déjà bien détaillé côté **installation et démarrage**.
+Il manque juste une petite section **“📖 Maintenance & Dépannage”** que tu peux rajouter à la fin pour couvrir ce que demandait le cahier des charges (procédures de maintenance).
+
+Voici un bloc prêt à coller dans ton `README.md` :
+
+---
+
+## 🛠️ Maintenance & Dépannage
+
+### 🔄 Réentraînement des modèles
+
+* **TF-IDF** :
+
+  ```bash
+  python scripts/train_minimal_tfidf.py
+  ```
+* **CamemBERT** (plus lourd, nécessite torch/transformers) :
+
+  ```bash
+  python scripts/train_camembert_baseline.py
+  ```
+
+### 🗂️ Base SQLite
+
+* Si l’historique des prédictions ne fonctionne pas (`no such table: predictions`), exécuter :
+
+  ```bash
+  python -c "import hpdb; hpdb.init_db('data/app.db')"
+  ```
+* Par défaut, la base est créée dans `data/app.db`.
+* Supprimer ce fichier permet de repartir avec une base vide.
+
+### ⚡ Problèmes fréquents
+
+* **Erreur NumPy** (`Numpy is not available`) :
+  Vérifier que vous avez `numpy<2` installé :
+
+  ```bash
+  pip install --force-reinstall "numpy<2,>=1.26"
+  ```
+* **OCR inactif** :
+
+  * Vérifier que Tesseract est installé et accessible.
+  * Modifier son chemin dans l’interface Streamlit si besoin.
+
+### 🚀 Mise à jour des assets (modèles & données)
+
+* Si un modèle ou dataset manque :
+
+  ```bash
+  python scripts/download_assets.py
+  ```
+* Les modèles sont aussi disponibles sur [Hugging Face](https://huggingface.co/Gkop/healthpredict-assets).
+
+---
