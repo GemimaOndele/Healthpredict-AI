@@ -80,15 +80,9 @@ streamlit run app/healthpredict_app.py
 http://localhost:8501
 
 
-
-Parfait 👍 ton README.md est déjà bien détaillé côté **installation et démarrage**.
-Il manque juste une petite section **“📖 Maintenance & Dépannage”** que tu peux rajouter à la fin pour couvrir ce que demandait le cahier des charges (procédures de maintenance).
-
-Voici un bloc prêt à coller dans ton `README.md` :
-
 ---
 
-## 🛠️ Maintenance & Dépannage
+    ## 🛠️ Maintenance & Dépannage
 
 ### 🔄 Réentraînement des modèles
 
