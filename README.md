@@ -80,8 +80,10 @@ streamlit run app/healthpredict_app.py
 http://localhost:8501
 
 
+
 ---
-**🛠️ Maintenance & Dépannage**  
+
+###🛠️ Maintenance & Dépannage**  
 
 ### 🔄 Réentraînement des modèles
 
@@ -127,6 +129,6 @@ http://localhost:8501
   python scripts/download_assets.py
   ```
 * Les modèles sont aussi disponibles sur [Hugging Face](https://huggingface.co/?activityType=update-dataset&feedType=user).
-* 
+
 
 ---
