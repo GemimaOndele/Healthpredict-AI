@@ -127,6 +127,7 @@ http://localhost:8501
   ```bash
   python scripts/download_assets.py
   ```
-* Les modèles sont aussi disponibles sur [Hugging Face](https://huggingface.co/Gkop/healthpredict-assets).
+* Les modèles sont aussi disponibles sur [Hugging Face](https://huggingface.co/?activityType=update-dataset&feedType=user).
+* 
 
 ---
