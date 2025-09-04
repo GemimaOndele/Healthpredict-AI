@@ -81,8 +81,7 @@ http://localhost:8501
 
 
 ---
-
-    ## 🛠️ Maintenance & Dépannage
+**🛠️ Maintenance & Dépannage**  
 
 ### 🔄 Réentraînement des modèles
 
