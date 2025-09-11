@@ -132,4 +132,35 @@ http://localhost:8501
 * Les modèles sont aussi disponibles sur [Hugging Face](https://huggingface.co/?activityType=update-dataset&feedType=user).
 
 
+# Données — HealthPredict AI
+
+## 1) Sources
+- **OpenFDA – Device Event** (publique) : incidents de dispositifs médicaux.
+  - Export initial via `scripts/01_download_openfda.py` (requêtes paginées).
+  - Fichier brut : `assets/data/raw/raw_openfda_imaging_reports.csv` (et `.jsonl`).
+- **Rapports de test** (usage académique) : documents hospitaliers anonymisés (ex. Joigny) pour valider l’OCR et la prédiction.
+  - Traités localement via l’onglet **📎 Documents** de l’app.
+
+## 2) Processus de préparation
+- Normalisation & étiquetage dans `scripts/build_processed_csv.py`.
+- Résultat : `assets/data/processed/medical_imaging_text_labeled.csv` avec colonnes clés :
+  - `event_text` (texte), `event_type` (Death/Injury/… si présent), `label` (0/1), `date_received` (date si présente).
+
+## 3) Confidentialité
+- Les fichiers de test contenant des éléments réels sont **anonymisés** et **non versionnés** publiquement.
+- Ne **push** jamais de données sensibles sur GitHub. Utiliser `.gitignore` pour tout dépôt de documents réels.
+
+## 4) Versionnement & traçabilité
+- Les artefacts lourds (datasets / modèles) sont publiés sur **Hugging Face** pour limiter la taille du repo :
+  - Modèles : `assets/models/*.joblib`
+  - Datasets : `assets/data/raw/*`, `assets/data/processed/*` (si nécessaire)
+- Variables & chemins dans `config/config.yaml` (voir README pour les commandes).
+
+## 5) Contrôles qualité
+- Lancer `scripts/validate_dataset.py` (voir README) pour vérifier :
+  - Présence des colonnes obligatoires
+  - Encodage UTF-8
+  - Duplicats & vides
+  - Statistiques de base
+
 
