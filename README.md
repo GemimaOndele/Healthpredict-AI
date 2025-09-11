@@ -216,7 +216,7 @@ Ajoute une petite section « API REST » :
 L’API expose des endpoints pour la prédiction (texte & fichier) — utile pour intégration tierce (applications internes, scripts).
 
 **Lancer l’API**
-```bash
+
 # depuis la racine du projet
 set HP_API_KEY=changeme  # Windows PowerShell: $env:HP_API_KEY="changeme"
 uvicorn api.main:app --host 0.0.0.0 --port 8000
@@ -244,6 +244,14 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
     -d "{\"text\":\"radiologie en panne et erreurs\",\"model\":\"tfidf\",\"return_keywords\":true}"
 
 
-
+## CI : Intégration continue
 ![CI](https://github.com/<TON_ORG>/<TON_REPO>/actions/workflows/ci.yml/badge.svg)
 
+
+## 🚢 Déploiement Docker
+
+### Lancer localement (sans API séparée)
+```bash
+docker build -f Dockerfile.app -t healthpredict-app .
+docker run --rm -p 8501:8501 -v %cd%/data:/app/data healthpredict-app
+# puis http://localhost:8501
