@@ -172,7 +172,7 @@ http://localhost:8501
 - **Pipeline** : voir `docs/architecture_data_pipeline.md`.
 
 ### ✅ Contrôle qualité (dataset)
-```bash
+
 # 1) Configurer les chemins (si besoin)
 #   -> config/config.yaml (paths.processed_csv / paths.raw_csv / ...)
 
@@ -195,16 +195,50 @@ python scripts/train_camembert_baseline.py
 # Évaluer et générer figures
 python notebooks/eval_healthpredict.py
 markdown
-Copier le code
 
-> Tu peux placer cette nouvelle section juste après “🚀 Démarrage rapide (local)”.
-
----
 
 # 2) Ce qu’il faut faire (et seulement ça)
 
 1) **Créer les fichiers** ci-dessus aux emplacements indiqués.  
-2) **Ajouter** la section “📦 Données & Gouvernance” dans ton `README.md`.  
+2) **Ajouter** la section “📦 Données & Gouvernance” dans le `README.md`.  
 3) **Exécuter** rapidement :
    - `python scripts/build_processed_csv.py` (si besoin),
    - `python scripts/validate_dataset.py` (doit afficher `Validation dataset réussie.`).
+
+
+
+✅ À METTRE À JOUR (README.md)
+
+Ajoute une petite section « API REST » :
+
+## 🔌 API REST (FastAPI)
+
+L’API expose des endpoints pour la prédiction (texte & fichier) — utile pour intégration tierce (applications internes, scripts).
+
+**Lancer l’API**
+```bash
+# depuis la racine du projet
+set HP_API_KEY=changeme  # Windows PowerShell: $env:HP_API_KEY="changeme"
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+
+  Endpoints
+  
+  GET /health → statut
+  
+  GET /version → info version & modèles
+  
+  POST /predict_text → {"text": "...", "model": "tfidf|camembert", "return_keywords": true}
+  
+  POST /predict_file → upload fichier (texte brut côté API ; OCR/parse avancé via l’app Streamlit)
+  
+  Sécurité
+  
+  Header requis si HP_API_KEY défini : X-API-Key: <clé>
+  
+  Exemple cURL
+  
+  curl -X POST http://localhost:8000/predict_text \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: changeme" \
+    -d "{\"text\":\"radiologie en panne et erreurs\",\"model\":\"tfidf\",\"return_keywords\":true}"
