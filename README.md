@@ -164,3 +164,47 @@ http://localhost:8501
   - Statistiques de base
 
 
+## 📦 Données & Gouvernance
+
+- **Sources & API** : voir `docs/api_data_sources.md`.
+- **Dictionnaire de données** : voir `docs/data_dictionary.md`.
+- **Traçabilité / confidentialité** : voir `data/README_data.md`.
+- **Pipeline** : voir `docs/architecture_data_pipeline.md`.
+
+### ✅ Contrôle qualité (dataset)
+```bash
+# 1) Configurer les chemins (si besoin)
+#   -> config/config.yaml (paths.processed_csv / paths.raw_csv / ...)
+
+# 2) Valider le CSV "processed"
+python scripts/validate_dataset.py
+# -> code 0 si OK, sinon détail des erreurs (colonnes manquantes, encodage, etc.)
+
+
+### 🔁 Préparation / entraînement / évaluation
+
+# Générer le processed CSV (si absent)
+python scripts/build_processed_csv.py
+
+# Entraîner TF-IDF
+python scripts/train_minimal_tfidf.py
+
+# (optionnel) Entraîner CamemBERT
+python scripts/train_camembert_baseline.py
+
+# Évaluer et générer figures
+python notebooks/eval_healthpredict.py
+markdown
+Copier le code
+
+> Tu peux placer cette nouvelle section juste après “🚀 Démarrage rapide (local)”.
+
+---
+
+# 2) Ce qu’il faut faire (et seulement ça)
+
+1) **Créer les fichiers** ci-dessus aux emplacements indiqués.  
+2) **Ajouter** la section “📦 Données & Gouvernance” dans ton `README.md`.  
+3) **Exécuter** rapidement :
+   - `python scripts/build_processed_csv.py` (si besoin),
+   - `python scripts/validate_dataset.py` (doit afficher `Validation dataset réussie.`).
