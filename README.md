@@ -242,3 +242,8 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
     -H "Content-Type: application/json" \
     -H "X-API-Key: changeme" \
     -d "{\"text\":\"radiologie en panne et erreurs\",\"model\":\"tfidf\",\"return_keywords\":true}"
+
+
+
+![CI](https://github.com/<TON_ORG>/<TON_REPO>/actions/workflows/ci.yml/badge.svg)
+
