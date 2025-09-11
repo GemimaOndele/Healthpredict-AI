@@ -196,20 +196,14 @@ python scripts/train_camembert_baseline.py
 python notebooks/eval_healthpredict.py
 markdown
 
+✅ À METTRE À JOUR (README.md)
 
-# 2) Ce qu’il faut faire (et seulement ça)
+# 2) Ce qu’il faut faire 
 
-1) **Créer les fichiers** ci-dessus aux emplacements indiqués.  
-2) **Ajouter** la section “📦 Données & Gouvernance” dans le `README.md`.  
-3) **Exécuter** rapidement :
+1) **Créer les fichiers et exécuter** ci-dessus aux emplacements indiqués.  
    - `python scripts/build_processed_csv.py` (si besoin),
    - `python scripts/validate_dataset.py` (doit afficher `Validation dataset réussie.`).
 
-
-
-✅ À METTRE À JOUR (README.md)
-
-Ajoute une petite section « API REST » :
 
 ## 🔌 API REST (FastAPI)
 
