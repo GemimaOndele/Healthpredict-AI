@@ -248,7 +248,7 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 ![CI](https://github.com/<TON_ORG>/<TON_REPO>/actions/workflows/ci.yml/badge.svg)
 
 
-## 🚢 Déploiement Docker
+## CD : 🚢 Déploiement Docker
 
 ### Lancer localement (sans API séparée)
 ```bash
