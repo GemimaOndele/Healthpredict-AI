@@ -240,7 +240,7 @@ python scripts/monitor.py
 *Badge CI (remplacer par votre org & repo)*
 
 ```markdown
-![CI](https://github.com/<TON_ORG>/<TON_REPO>/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/GemimaOndele/Healthpredict-AI/actions/workflows/ci.yml/badge.svg)
 ```
 
 ---
