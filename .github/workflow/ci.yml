@@ -1,15 +1,82 @@
 name: CI
+
 on:
   push:
   pull_request:
+
 jobs:
   test:
+    runs-on: ubuntu-latest
+    env:
+      # ⚙️ CI "light" pour aller vite et rester fiable
+      HP_AUTO_DOWNLOAD: "1"
+      HP_DOWNLOAD_CAMEMBERT: "0"   # on évite les gros poids en CI
+      HP_USE_CAMEMBERT: "0"
+      HP_DB: "${{ github.workspace }}/data/app_ci.db"
+      HP_MAX_ROWS_UI: "5000"
+      HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
+      # Optionnel si repo privé HF : définir ce secret dans le repo
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 📦 Cache pip pour accélérer
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # S'assure que tests & API sont dispos (au cas où)
+          pip install pytest fastapi uvicorn
+
+      # ⬇️ Assets légers (TF-IDF + CSV) – CamemBERT est OFF
+      - name: Download assets
+        run: python scripts/download_assets.py
+
+      # ✅ Tests unitaires/rapides
+      - name: Run tests
+        run: pytest -q
+
+      # 🚦 Smoke test API (si api/main.py existe)
+      - name: Smoke test FastAPI
+        if: ${{ hashFiles('api/main.py') != '' }}
+        run: |
+          python -c "import os, pathlib; pathlib.Path('data').mkdir(exist_ok=True)"
+          uvicorn api.main:app --host 127.0.0.1 --port 8000 &
+          sleep 2
+          curl -s -X POST http://127.0.0.1:8000/predict \
+               -H "Content-Type: application/json" \
+               -d '{"text":"radiologie en panne et affiche des erreurs"}' | tee /tmp/api_out.json
+          python - <<'PY'
+import json,sys
+d=json.load(open('/tmp/api_out.json'))
+# on vérifie un minimum (clé présente + type)
+assert isinstance(d, dict) and ("label" in d or "prediction" in d or "proba" in d)
+print("OK:", d)
+PY
+
+
+
+- Ajouter un job dans `.github/workflows/ci.yml` pour le linting avec ruff et mypy :
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt pytest
-      - run: python scripts/download_assets.py
-      - run: pytest -q
+      - run: pip install ruff mypy
+      - run: ruff check .
+      - run: mypy --ignore-missing-imports app fastapi_app.py scripts hpdb.py

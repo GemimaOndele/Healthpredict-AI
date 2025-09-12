@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: healthpredict-api
+    environment:
+      - HP_API_KEY=${HP_API_KEY:-changeme}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./assets/models:/app/assets/models:ro
+      - ./data:/app/data
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: healthpredict-app
+    environment:
+      - HP_DB=/app/data/app.db
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./assets:/app/assets:ro
+    command: streamlit run app/healthpredict_app.py --server.port=8501 --server.address=0.0.0.0

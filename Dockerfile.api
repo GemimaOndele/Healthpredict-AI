@@ -1,0 +1,26 @@
+# Dockerfile.api
+FROM python:3.11-slim
+
+# 1) Déps système légères (poppler/tesseract en option seulement si tu en as besoin côté API)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 2) Copier uniquement le nécessaire pour installer vite
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir uvicorn fastapi
+
+# 3) Copier le code
+COPY . .
+
+# 4) Variables par défaut (à adapter si besoin)
+ENV HP_AUTO_DOWNLOAD=0 \
+    HP_DB=/app/data/app.db \
+    PYTHONUNBUFFERED=1
+
+# 5) Lancer l’API FastAPI (fichier déjà fourni : main.py)
+EXPOSE 8000
+CMD ["uvicorn", "fastapi_app:app", "--host", "0.0.0.0", "--port", "8000"]

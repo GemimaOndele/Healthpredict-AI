@@ -1,0 +1,22 @@
+{
+  "info": {
+    "name": "HealthPredict API",
+    "_postman_id": "a1111111-b222-4333-c444-555555555555",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item":[
+    {
+      "name":"Health",
+      "request":{"method":"GET","header":[],"url":"http://localhost:8000/health"}
+    },
+    {
+      "name":"Predict TFIDF",
+      "request":{
+        "method":"POST",
+        "header":[{"key":"Content-Type","value":"application/json"},{"key":"X-API-Key","value":"changeme"}],
+        "body":{"mode":"raw","raw":"{\"text\":\"radiologie en panne et erreurs\",\"model\":\"tfidf\",\"return_keywords\":true}"},
+        "url":"http://localhost:8000/predict_text"
+      }
+    }
+  ]
+}
