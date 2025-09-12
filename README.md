@@ -241,10 +241,6 @@ python scripts/monitor.py
 
 ```markdown
 ![CI](https://github.com/GemimaOndele/Healthpredict-AI/actions/workflows/ci.yml/badge.svg)
-<<<<<<< HEAD
-
-=======
->>>>>>> 3e69efb00b6ad895202634bba3df8bbef1b527ac
 ```
 
 ---
