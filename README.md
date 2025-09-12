@@ -1,14 +1,155 @@
 # HealthPredict AI — Maintenance prédictive des équipements médicaux
 
-Application Streamlit pour analyser des rapports d’incidents (OpenFDA & documents) et prédire la criticité via IA (TF-IDF/LogReg ou CamemBERT + classif). OCR, traduction EN→FR optionnelle, similarité historique, export CSV/XLSX, historique SQLite.
+Application **Streamlit** pour analyser des rapports d’incidents (OpenFDA & documents) et **prédire la criticité** via IA (TF-IDF/LogReg ou CamemBERT+classif). OCR, traduction EN→FR optionnelle, similarité historique, export CSV/XLSX, historique SQLite.
 
 ## ✨ Fonctionnalités
 - Chargement dataset (processed/raw), fallback auto.
 - Prédiction texte libre & documents (PDF, DOCX, images → OCR).
-- Mots-clés TF-IDF, cas similaires (cosinus).
+- Mots-clés TF-IDF et recherche de cas similaires (cosinus).
 - Traduction EN→FR (Transformers, optionnel).
 - Historique des prédictions (SQLite).
-- Graphiques de tendance (Altair).
+- Graphiques de tendance (Altair)/prévision simple.
+
+---
+
+Linux / macOS
+
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+
+2) Variables (optionnel)
+# Windows
+Copy-Item .env.example .env
+$env:HP_AUTO_DOWNLOAD="1"
+$env:HP_DB="$pwd\data\app.db"
+
+# Linux/macOS
+cp .env.example .env
+export HP_AUTO_DOWNLOAD=1
+export HP_DB="$PWD/data/app.db"
+
+3) Téléchargement des assets & préparation des données
+python scripts/download_assets.py
+python scripts/build_processed_csv.py
+python scripts/validate_dataset.py   # doit afficher "Validation dataset réussie."
+
+4) (Option) entraînement des modèles
+python scripts/train_minimal_tfidf.py
+# CamemBERT (plus lourd)
+python scripts/train_camembert_baseline.py
+
+5) Lancer l’application
+streamlit run app/healthpredict_app.py
+# → http://localhost:8501
+
+🔌 API REST (FastAPI)
+
+Endpoints utiles pour intégrations tierces.
+
+Lancer l’API
+
+$env:HP_API_KEY="changeme"
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+# → http://localhost:8000/docs
+
+
+Exemples
+
+# Health
+curl http://localhost:8000/health
+
+# Prédiction texte (TF-IDF + mots-clés)
+curl -X POST http://localhost:8000/predict_text \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: changeme" \
+  -d '{"text":"scanner error overheating pump","model":"tfidf","return_keywords":true}'
+
+🧪 Tests
+# (si besoin) rendre le package 'api' importable
+# → pytest.ini doit contenir:  [pytest]  pythonpath = .
+pytest -q
+
+🛠️ Dépannage rapide
+
+DB non initialisée / historique désactivé
+
+python -c "import hpdb,os; hpdb.init_db(os.environ.get('HP_DB','data/app.db'))"
+
+
+NumPy / Torch
+
+Préf. numpy>=1.26,<3
+
+CPU Torch (option):
+
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+
+OCR
+
+Installer Tesseract puis configurer le chemin dans l’UI (onglet Documents).
+
+📂 Données
+
+OpenFDA (Device Event) → assets/data/raw/…
+
+Processed CSV → assets/data/processed/medical_imaging_text_labeled.csv
+
+Éval (ROC/PR/CM) → assets/eval/
+
+Modèles → assets/models/*.joblib
+
+Les jeux et modèles lourds sont hébergés sur Hugging Face (scripts download_assets.py).
+
+📦 CI / Qualité (optionnel)
+
+Workflow GitHub Actions : pytest (tests) + ruff (lint).
+
+Docker (plus tard) : Dockerfile.app, Dockerfile.api, docker-compose.yml.
+
+🔒 Avertissement
+
+Projet éducatif/démo. Ne pas utiliser pour décision médicale sans validation clinique.
+
+
+---
+
+## Ce que tu as à faire côté repo
+
+1) Remplacer **tel quel** les trois fichiers :
+- `api/main.py`
+- `requirements.txt`
+- `README.md`
+
+2) (Si ce n’est pas déjà le cas) t’assurer que **`api/__init__.py`** existe (même vide) pour que `from api.main import app` fonctionne pendant `pytest`.
+
+3) Vérifier que ton **`pytest.ini`** contient bien :
+```ini
+[pytest]
+pythonpath = .
+
+
+Relancer rapidement :
+
+# Windows PowerShell
+.\.henv\Scripts\Activate.ps1
+$env:HP_DB="$pwd\data\app.db"
+python -c "import hpdb,os; hpdb.init_db(os.environ['HP_DB'])"
+pytest -q
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+streamlit run app/healthpredict_app.py
+## 🚀 Installation rapide
+
+### 1) Créer l’environnement
+
+**Windows (PowerShell)**
+```powershell
+python -m venv .henv
+.\.henv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
 
 ## 🚀 Démarrage rapide (local)
 ```bash #terminal git bash
