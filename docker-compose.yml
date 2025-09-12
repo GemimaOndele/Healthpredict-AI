@@ -1,3 +1,4 @@
+# docker-compose.yml
 services:
   api:
     build:
@@ -6,8 +7,7 @@ services:
     container_name: healthpredict-api
     environment:
       - HP_API_KEY=${HP_API_KEY:-changeme}
-    ports:
-      - "8000:8000"
+    ports: ["8000:8000"]
     volumes:
       - ./assets/models:/app/assets/models:ro
       - ./data:/app/data
@@ -20,8 +20,7 @@ services:
     container_name: healthpredict-app
     environment:
       - HP_DB=/app/data/app.db
-    ports:
-      - "8501:8501"
+    ports: ["8501:8501"]
     volumes:
       - ./data:/app/data
       - ./assets:/app/assets:ro
